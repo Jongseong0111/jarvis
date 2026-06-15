@@ -1,0 +1,9 @@
+# Phase 2+ Worker 인터페이스 mock 생성용. Phase 1에선 사용 안 함.
+with-expecter: true
+dir: "{{.InterfaceDir}}/mocks"
+filename: "{{.InterfaceName}}.go"
+mockname: "{{.InterfaceName}}"
+packages:
+  github.com/Jongseong0111/jarvis/domain:
+    config:
+      all: true

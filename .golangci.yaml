@@ -1,0 +1,11 @@
+# acloset-api 컨벤션 축약본. 설치된 golangci-lint 버전에 맞춰 필요시 조정.
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - paralleltest
+    - wrapcheck
