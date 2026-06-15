@@ -1,0 +1,12 @@
+# secrets
+config/.env
+.env
+
+# build
+/bin/
+*.test
+*.out
+
+# os/editor
+.DS_Store
+.idea/
