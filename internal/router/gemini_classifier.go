@@ -4,17 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
-
-	"google.golang.org/genai"
 
 	"github.com/Jongseong0111/jarvis/domain"
-)
-
-const (
-	defaultModel     = "gemini-2.5-flash-lite"
-	classifyTimeout  = 15 * time.Second
-	classifyEnumMIME = "text/x.enum" // Gemini enum 응답 MIME 타입
+	"github.com/Jongseong0111/jarvis/internal/gemini"
 )
 
 // intentDescriptions 는 분류 프롬프트에 노출할 intent별 한국어 설명이다.
@@ -34,53 +26,30 @@ var intentDescriptions = []struct {
 	{domain.IntentUnknown, "위 어디에도 해당하지 않거나 모호한 경우"},
 }
 
-// GeminiClassifier 는 Gemini API 로 텍스트를 intent enum 으로 분류한다.
+// GeminiClassifier 는 공유 Gemini 클라이언트로 텍스트를 intent enum 으로 분류한다.
 // domain.Classifier 를 구현한다.
 type GeminiClassifier struct {
-	apiKey string
-	model  string
+	client *gemini.Client
 }
 
 // NewGeminiClassifier 는 GeminiClassifier 를 생성한다. model 이 비면 기본 모델을 쓴다.
 func NewGeminiClassifier(apiKey, model string) GeminiClassifier {
-	if strings.TrimSpace(model) == "" {
-		model = defaultModel
-	}
-	return GeminiClassifier{apiKey: apiKey, model: model}
+	return GeminiClassifier{client: gemini.New(apiKey, model)}
 }
 
-// Classify 는 Gemini structured output(enum 제약)으로 텍스트를 intent 로 분류한다.
+// NewGeminiClassifierWith 는 이미 만든 공유 클라이언트로 GeminiClassifier 를 생성한다.
+func NewGeminiClassifierWith(client *gemini.Client) GeminiClassifier {
+	return GeminiClassifier{client: client}
+}
+
+// Classify 는 enum structured output 으로 텍스트를 intent 로 분류한다.
 // 호출 실패는 error 로 반환하고, 비유효 응답은 system.unknown 으로 흡수한다.
 func (c GeminiClassifier) Classify(ctx context.Context, text string) (domain.Intent, error) {
-	ctx, cancel := context.WithTimeout(ctx, classifyTimeout)
-	defer cancel()
-
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  c.apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", fmt.Errorf("gemini 클라이언트 생성 실패: %w", err)
-	}
-
-	temp := float32(0)
-	resp, err := client.Models.GenerateContent(
-		ctx,
-		c.model,
-		genai.Text(buildClassifyPrompt(text)),
-		&genai.GenerateContentConfig{
-			Temperature:      &temp,
-			ResponseMIMEType: classifyEnumMIME,
-			ResponseSchema: &genai.Schema{
-				Type: genai.TypeString,
-				Enum: enumValues(),
-			},
-		},
-	)
+	out, err := c.client.GenerateEnum(ctx, buildClassifyPrompt(text), enumValues())
 	if err != nil {
 		return "", fmt.Errorf("intent 분류 호출 실패: %w", err)
 	}
-	return validateIntent(resp.Text()), nil
+	return validateIntent(out), nil
 }
 
 // buildClassifyPrompt 는 분류 지시문 + intent 설명 + 사용자 텍스트로 프롬프트를 만든다. (순수 함수)
