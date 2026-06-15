@@ -10,3 +10,6 @@ config/.env
 # os/editor
 .DS_Store
 .idea/
+
+# claude local
+.claude/settings.local.json
