@@ -7,7 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Jongseong0111/jarvis/domain"
+	"github.com/Jongseong0111/jarvis/internal/router"
 	"github.com/Jongseong0111/jarvis/internal/slack"
+	"github.com/Jongseong0111/jarvis/internal/workers"
 	"github.com/Jongseong0111/jarvis/pkg/config"
 	"github.com/Jongseong0111/jarvis/pkg/log"
 )
@@ -26,7 +29,17 @@ func main() {
 		logger.Error("slack 클라이언트 생성 실패", "error", err)
 		os.Exit(1)
 	}
-	handler := slack.NewHandler(client)
+
+	classifier := router.NewGeminiClassifier(cfg.GeminiAPIKey, cfg.GeminiModel)
+	msgRouter := router.NewRouter(
+		classifier,
+		map[string]domain.Worker{
+			"home":      workers.NewHome(),
+			"knowledge": workers.NewKnowledge(),
+		},
+		workers.NewSystem(), // system.* 및 매핑 없는 intent fallback
+	)
+	handler := slack.NewHandler(msgRouter, client)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

@@ -9,10 +9,11 @@ func TestConfig_validate(t *testing.T) {
 		cfg     Config
 		wantErr bool
 	}{
-		{name: "정상", cfg: Config{SlackBotToken: "xoxb-1", SlackAppToken: "xapp-1"}, wantErr: false},
-		{name: "bot 토큰 누락", cfg: Config{SlackAppToken: "xapp-1"}, wantErr: true},
-		{name: "app 토큰 누락", cfg: Config{SlackBotToken: "xoxb-1"}, wantErr: true},
-		{name: "두 토큰 모두 빈 값", cfg: Config{}, wantErr: true},
+		{name: "정상", cfg: Config{SlackBotToken: "xoxb-1", SlackAppToken: "xapp-1", GeminiAPIKey: "AI-1"}, wantErr: false},
+		{name: "bot 토큰 누락", cfg: Config{SlackAppToken: "xapp-1", GeminiAPIKey: "AI-1"}, wantErr: true},
+		{name: "app 토큰 누락", cfg: Config{SlackBotToken: "xoxb-1", GeminiAPIKey: "AI-1"}, wantErr: true},
+		{name: "gemini 키 누락", cfg: Config{SlackBotToken: "xoxb-1", SlackAppToken: "xapp-1"}, wantErr: true},
+		{name: "모두 빈 값", cfg: Config{}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

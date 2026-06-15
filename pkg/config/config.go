@@ -13,6 +13,8 @@ type Config struct {
 	Env           string
 	SlackBotToken string
 	SlackAppToken string
+	GeminiAPIKey  string
+	GeminiModel   string
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -23,6 +25,8 @@ func New() (Config, error) {
 		Env:           getenv("JARVIS_ENV", "local"),
 		SlackBotToken: os.Getenv("SLACK_BOT_TOKEN"),
 		SlackAppToken: os.Getenv("SLACK_APP_TOKEN"),
+		GeminiAPIKey:  os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:   getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -36,6 +40,9 @@ func (c Config) validate() error {
 	}
 	if c.SlackAppToken == "" {
 		return fmt.Errorf("SLACK_APP_TOKEN 이 비어있습니다")
+	}
+	if c.GeminiAPIKey == "" {
+		return fmt.Errorf("GEMINI_API_KEY 가 비어있습니다")
 	}
 	return nil
 }

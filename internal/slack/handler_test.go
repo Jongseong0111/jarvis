@@ -8,63 +8,6 @@ import (
 	"github.com/Jongseong0111/jarvis/domain"
 )
 
-func Test_buildEcho(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		in       domain.IncomingMessage
-		wantText string
-		wantOK   bool
-	}{
-		{
-			name:     "멘션 토큰 제거 후 echo",
-			in:       domain.IncomingMessage{ChannelID: "C1", Text: "<@U123> 안녕"},
-			wantText: "안녕",
-			wantOK:   true,
-		},
-		{
-			name:     "DM 평문 echo",
-			in:       domain.IncomingMessage{ChannelID: "D1", Text: "건전지 어디 뒀지?"},
-			wantText: "건전지 어디 뒀지?",
-			wantOK:   true,
-		},
-		{
-			name:   "멘션만 있고 본문 없음 → 응답 안 함",
-			in:     domain.IncomingMessage{ChannelID: "C1", Text: "<@U123>   "},
-			wantOK: false,
-		},
-		{
-			name:     "파이프 포맷 멘션 제거 후 echo",
-			in:       domain.IncomingMessage{ChannelID: "C1", Text: "<@U123|길동> 안녕"},
-			wantText: "안녕",
-			wantOK:   true,
-		},
-		{
-			name:     "복수 멘션 제거 후 echo",
-			in:       domain.IncomingMessage{ChannelID: "C1", Text: "<@U1> <@U2> 회의"},
-			wantText: "회의",
-			wantOK:   true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			reply, ok := buildEcho(tt.in)
-			if ok != tt.wantOK {
-				t.Fatalf("buildEcho ok = %v, want %v", ok, tt.wantOK)
-			}
-			if ok {
-				if reply.Text != tt.wantText {
-					t.Fatalf("buildEcho text = %q, want %q", reply.Text, tt.wantText)
-				}
-				if reply.ChannelID != tt.in.ChannelID {
-					t.Fatalf("buildEcho channel = %q, want %q", reply.ChannelID, tt.in.ChannelID)
-				}
-			}
-		})
-	}
-}
-
 // fakeSender 는 테스트용 MessageSender 구현이다.
 type fakeSender struct {
 	sent []domain.Reply
@@ -76,60 +19,92 @@ func (f *fakeSender) Send(_ context.Context, reply domain.Reply) error {
 	return f.err
 }
 
+// fakeRouter 는 받은 메시지를 기록하고 고정 응답/에러를 반환하는 테스트용 MessageRouter 다.
+type fakeRouter struct {
+	got   domain.IncomingMessage
+	reply domain.Reply
+	err   error
+}
+
+func (f *fakeRouter) Route(_ context.Context, in domain.IncomingMessage) (domain.Reply, error) {
+	f.got = in
+	return f.reply, f.err
+}
+
 func TestHandler_Handle(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		in          domain.IncomingMessage
-		senderErr   error
-		wantSent    int
-		wantText    string
-		wantErr     bool
-		wantErrWrap error
+		name       string
+		in         domain.IncomingMessage
+		routerRep  domain.Reply
+		routerErr  error
+		senderErr  error
+		wantRouted bool   // 라우터가 호출되었는지
+		wantText   string // 라우터에 전달된(정리된) 텍스트
+		wantSent   int
+		wantReply  string // Send 된 응답 텍스트
+		wantErr    bool
 	}{
 		{
-			name:     "본문 있는 메시지 → Send 1회 호출",
-			in:       domain.IncomingMessage{ChannelID: "C1", UserID: "U1", Text: "<@U123> 안녕"},
-			wantSent: 1,
-			wantText: "안녕",
-			wantErr:  false,
+			name:       "멘션 제거 후 라우터 위임 → 응답 전송",
+			in:         domain.IncomingMessage{ChannelID: "C1", Text: "<@U123> 건전지 어디 뒀지?"},
+			routerRep:  domain.Reply{ChannelID: "C1", Text: "home:home.search"},
+			wantRouted: true,
+			wantText:   "건전지 어디 뒀지?",
+			wantSent:   1,
+			wantReply:  "home:home.search",
 		},
 		{
-			name:     "빈 본문 → Send 호출 안 됨, 에러 nil",
-			in:       domain.IncomingMessage{ChannelID: "C1", UserID: "U1", Text: "<@U123>  "},
-			wantSent: 0,
-			wantErr:  false,
+			name:       "빈 본문 → 라우터 미호출, Send 안 함",
+			in:         domain.IncomingMessage{ChannelID: "C1", Text: "<@U123>   "},
+			wantRouted: false,
+			wantSent:   0,
 		},
 		{
-			name:        "sender 에러 → 래핑된 에러 반환",
-			in:          domain.IncomingMessage{ChannelID: "C1", UserID: "U1", Text: "안녕"},
-			senderErr:   errors.New("network error"),
-			wantSent:    1,
-			wantErr:     true,
-			wantErrWrap: errors.New("network error"),
+			name:       "라우터 에러 → 에러 안내 응답 전송",
+			in:         domain.IncomingMessage{ChannelID: "C1", Text: "안녕"},
+			routerErr:  errors.New("classify failed"),
+			wantRouted: true,
+			wantText:   "안녕",
+			wantSent:   1,
+			wantReply:  errorReplyText,
+		},
+		{
+			name:       "sender 에러 → 래핑된 에러 반환",
+			in:         domain.IncomingMessage{ChannelID: "C1", Text: "안녕"},
+			routerRep:  domain.Reply{ChannelID: "C1", Text: "ok"},
+			senderErr:  errors.New("network error"),
+			wantRouted: true,
+			wantText:   "안녕",
+			wantSent:   1,
+			wantErr:    true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			fr := &fakeRouter{reply: tt.routerRep, err: tt.routerErr}
 			fs := &fakeSender{err: tt.senderErr}
-			h := NewHandler(fs)
+			h := NewHandler(fr, fs)
+
 			err := h.Handle(context.Background(), tt.in)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Handle() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr && tt.senderErr != nil {
-				if !errors.Is(err, tt.senderErr) {
-					t.Fatalf("Handle() error = %v, want wrapped %v", err, tt.senderErr)
-				}
+			if tt.wantErr && tt.senderErr != nil && !errors.Is(err, tt.senderErr) {
+				t.Fatalf("Handle() error = %v, want wrapped %v", err, tt.senderErr)
+			}
+			if tt.wantRouted && fr.got.Text != tt.wantText {
+				t.Fatalf("라우터 전달 텍스트 = %q, want %q", fr.got.Text, tt.wantText)
+			}
+			if !tt.wantRouted && fr.got.Text != "" {
+				t.Fatalf("라우터가 호출되지 않아야 하는데 호출됨: %q", fr.got.Text)
 			}
 			if len(fs.sent) != tt.wantSent {
 				t.Fatalf("Send 호출 횟수 = %d, want %d", len(fs.sent), tt.wantSent)
 			}
-			if tt.wantSent > 0 && tt.wantText != "" {
-				if fs.sent[0].Text != tt.wantText {
-					t.Fatalf("reply.Text = %q, want %q", fs.sent[0].Text, tt.wantText)
-				}
+			if tt.wantReply != "" && fs.sent[0].Text != tt.wantReply {
+				t.Fatalf("Send 응답 = %q, want %q", fs.sent[0].Text, tt.wantReply)
 			}
 		})
 	}
