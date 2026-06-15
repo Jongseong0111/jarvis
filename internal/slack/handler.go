@@ -3,6 +3,7 @@ package slack
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -10,8 +11,9 @@ import (
 	"github.com/Jongseong0111/jarvis/pkg/log"
 )
 
-// mentionPattern 은 Slack 멘션 토큰(<@U123>)을 매칭한다.
-var mentionPattern = regexp.MustCompile(`<@[A-Z0-9]+>`)
+// mentionPattern 은 Slack 멘션 토큰(<@U123> 및 <@U123|name> 형태)을 매칭한다.
+var mentionPattern = regexp.MustCompile(`<@[A-Z0-9]+(?:\|[^>]*)?>`)
+
 
 // Handler 는 수신 메시지를 echo 응답으로 처리한다.
 type Handler struct {
@@ -30,7 +32,10 @@ func (h Handler) Handle(ctx context.Context, in domain.IncomingMessage) error {
 		return nil
 	}
 	log.FromContext(ctx).Info("echo 응답", "channel", reply.ChannelID, "text", reply.Text)
-	return h.sender.Send(ctx, reply)
+	if err := h.sender.Send(ctx, reply); err != nil {
+		return fmt.Errorf("echo 전송 실패: %w", err)
+	}
+	return nil
 }
 
 // buildEcho 는 수신 메시지로부터 echo 응답을 계산한다. SDK/네트워크 비의존.

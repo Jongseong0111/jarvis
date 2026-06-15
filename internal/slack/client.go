@@ -44,19 +44,27 @@ func (c *Client) Send(ctx context.Context, reply domain.Reply) error {
 // Run 은 이벤트 루프를 실행한다(ctx 취소까지 블로킹).
 func (c *Client) Run(ctx context.Context, handler Handler) error {
 	go func() {
-		for evt := range c.socket.Events {
-			if evt.Type != socketmode.EventTypeEventsAPI {
-				continue
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case evt, ok := <-c.socket.Events:
+				if !ok {
+					return
+				}
+				if evt.Type != socketmode.EventTypeEventsAPI {
+					continue
+				}
+				eventsAPI, ok := evt.Data.(slackevents.EventsAPIEvent)
+				if !ok {
+					continue
+				}
+				// Ack 는 error 를 반환하므로 무시하지 않고 로깅한다.
+				if err := c.socket.Ack(*evt.Request); err != nil {
+					log.FromContext(ctx).Error("slack ack 실패", "error", err)
+				}
+				c.dispatch(ctx, eventsAPI, handler)
 			}
-			eventsAPI, ok := evt.Data.(slackevents.EventsAPIEvent)
-			if !ok {
-				continue
-			}
-			// Ack 는 error 를 반환하므로 무시하지 않고 로깅한다.
-			if err := c.socket.Ack(*evt.Request); err != nil {
-				log.FromContext(ctx).Error("slack ack 실패", "error", err)
-			}
-			c.dispatch(ctx, eventsAPI, handler)
 		}
 	}()
 	if err := c.socket.RunContext(ctx); err != nil {
@@ -75,6 +83,10 @@ func (c *Client) dispatch(ctx context.Context, event slackevents.EventsAPIEvent,
 	var in domain.IncomingMessage
 	switch ev := event.InnerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
+		// 다른 봇이 @jarvis 를 멘션하는 경우 무시한다.
+		if ev.BotID != "" {
+			return
+		}
 		in = domain.IncomingMessage{ChannelID: ev.Channel, UserID: ev.User, Text: ev.Text}
 	case *slackevents.MessageEvent:
 		if ev.ChannelType != "im" || ev.SubType != "" || ev.BotID != "" || ev.User == c.botID {
