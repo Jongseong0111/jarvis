@@ -60,3 +60,19 @@ type Worker interface {
 type MessageRouter interface {
 	Route(ctx context.Context, in IncomingMessage) (Reply, error)
 }
+
+// ChangeProposal 은 승인 대기 중인 변경안이다. 버튼 value 에 JSON 으로 인코딩된다.
+type ChangeProposal struct {
+	Action       string `json:"action"` // "add"
+	ItemName     string `json:"item"`
+	CategoryID   string `json:"category_id,omitempty"`   // resolve 된 Notion page ID
+	CategoryName string `json:"category_name,omitempty"` // 표시용
+	LocationID   string `json:"location_id"`             // resolve 된 Notion page ID
+	LocationName string `json:"location_name"`           // 표시용
+	Quantity     *int   `json:"quantity,omitempty"`
+}
+
+// ProposalApplier 는 승인된 변경안을 실제 시스템에 반영한다.
+type ProposalApplier interface {
+	Apply(ctx context.Context, p ChangeProposal) (Reply, error)
+}
