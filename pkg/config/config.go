@@ -15,6 +15,11 @@ type Config struct {
 	SlackAppToken string
 	GeminiAPIKey  string
 	GeminiModel   string
+
+	NotionAPIKey         string
+	NotionLocationsDBID  string
+	NotionCategoriesDBID string
+	NotionItemsDBID      string
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -27,6 +32,11 @@ func New() (Config, error) {
 		SlackAppToken: os.Getenv("SLACK_APP_TOKEN"),
 		GeminiAPIKey:  os.Getenv("GEMINI_API_KEY"),
 		GeminiModel:   getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+
+		NotionAPIKey:         os.Getenv("NOTION_API_KEY"),
+		NotionLocationsDBID:  os.Getenv("NOTION_LOCATIONS_DB_ID"),
+		NotionCategoriesDBID: os.Getenv("NOTION_CATEGORIES_DB_ID"),
+		NotionItemsDBID:      os.Getenv("NOTION_ITEMS_DB_ID"),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -43,6 +53,12 @@ func (c Config) validate() error {
 	}
 	if c.GeminiAPIKey == "" {
 		return fmt.Errorf("GEMINI_API_KEY 가 비어있습니다")
+	}
+	if c.NotionAPIKey == "" {
+		return fmt.Errorf("NOTION_API_KEY 가 비어있습니다")
+	}
+	if c.NotionLocationsDBID == "" || c.NotionCategoriesDBID == "" || c.NotionItemsDBID == "" {
+		return fmt.Errorf("NOTION_{LOCATIONS,CATEGORIES,ITEMS}_DB_ID 가 비어있습니다")
 	}
 	return nil
 }
