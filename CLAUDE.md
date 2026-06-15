@@ -115,6 +115,10 @@ CloudWatch 로그그룹 안 보였던 문제 트러블슈팅으로 정리해줘
 
 지식 저장소는 별도 Git repo로 관리한다.
 
+> 현황: 지식 저장소는 이미 `~/personal-agent/knowledge-base`에 Claude Code skills + markdown 기반으로
+> 구현되어 있다(`/kb-ingest`, `/kb-approve`, `/kb-search` 등 — 해당 repo의 README 참조).
+> KnowledgeRepoWorker(Phase 4)는 이 기존 repo를 대상으로 Claude Code headless를 실행하는 연동 계층이다.
+
 KnowledgeRepoWorker는 다음 방식으로 동작한다.
 
 ```txt
@@ -249,61 +253,37 @@ Claude Code 실행 후 바로 commit하지 않는다.
 
 ## 권장 디렉터리 구조
 
+실제 구조(현재 구현 기준). `~/personal-agent/`는 git repo가 아닌 작업공간 폴더이고,
+그 아래 `jarvis`(이 서버)와 `knowledge-base`(지식 저장소)가 **독립 git repo**로 sibling 배치된다.
+
 ```txt
-personal-agent-server/
-  cmd/
-    server/
-      main.go
-
-  internal/
-    app/
-      app.go
-
-    slack/
-      client.go
-      handler.go
-
-    router/
-      intent_router.go
-      types.go
-
-    workers/
-      home/
-        worker.go
-        notion_client.go
-        types.go
-
-      knowledge/
-        worker.go
-        claude_runner.go
-        git.go
-        types.go
-
-      todo/
-        worker.go
-
-    approval/
-      store.go
-      types.go
-
-    llm/
-      client.go
-      prompts.go
-
-    config/
-      config.go
-
-    logger/
-      logger.go
-
-  docs/
-    architecture.md
-    setup.md
-
-  .env.example
-  README.md
-  CLAUDE.md
+~/personal-agent/                     # 작업공간 폴더 (git repo 아님)
+  jarvis/                             # 이 에이전트 서버 (Go, 개인 repo)
+    cmd/server/main.go                # 진입점 + DI 조립
+    domain/                           # 인터페이스/DTO/모델만 (구현 없음)
+      slack.go                        #   IncomingMessage/Reply/MessageSender
+    internal/
+      slack/                          # Slack 채널 어댑터 (client.go, handler.go)
+      router/                         # (Phase 2) Intent Router
+      workers/                        # (Phase 3+) home / knowledge / todo
+    pkg/
+      config/                         # .env/환경변수 로드·검증
+      log/                            # slog 구조화 로거
+    config/.env                       # 토큰 (gitignore)
+    Makefile  .golangci.yaml  .mockery.yaml
+    CLAUDE.md
+    docs/superpowers/{specs,plans}/   # 설계/구현 문서
+  knowledge-base/                     # 별도 git repo: 지식 저장소
+                                      #   Claude Code skills 기반 (/kb-ingest, /kb-approve 등)
 ```
+
+### 코딩/구조 컨벤션
+
+회사 서버 `acloset-api`의 Clean Architecture(Domain→Worker→Channel) + constructor 주입 +
+value receiver + 네이밍 + table-driven 테스트(`t.Parallel()`, 정적 시간) + 한국어 주석/커밋을 차용한다.
+단 규모에 맞게 적응: 로깅은 `slog`(zerolog+APM 대신), 설정은 `.env`/환경변수(YAML+SecretsManager 대신),
+에러는 stdlib `errors`+`fmt.Errorf(...: %w)`(codegen 대신). 상세는
+`docs/superpowers/specs/2026-06-15-jarvis-phase1-design.md` §4 참조.
 
 ## 구현 우선순위
 
@@ -424,7 +404,7 @@ ANTHROPIC_API_KEY=
 NOTION_API_KEY=
 NOTION_HOME_DB_ID=
 
-KNOWLEDGE_REPO_PATH=/Users/me/repos/personal-knowledge
+KNOWLEDGE_REPO_PATH=~/personal-agent/knowledge-base
 
 GIT_AUTHOR_NAME=
 GIT_AUTHOR_EMAIL=
