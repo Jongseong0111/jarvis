@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 )
 
@@ -75,4 +76,19 @@ type ChangeProposal struct {
 // ProposalApplier 는 승인된 변경안을 실제 시스템에 반영한다.
 type ProposalApplier interface {
 	Apply(ctx context.Context, p ChangeProposal) (Reply, error)
+}
+
+// Encode 는 변경안을 버튼 value 용 JSON 문자열로 직렬화한다.
+func (p ChangeProposal) Encode() string {
+	b, _ := json.Marshal(p)
+	return string(b)
+}
+
+// DecodeProposal 은 버튼 value 문자열을 변경안으로 역직렬화한다.
+func DecodeProposal(s string) (ChangeProposal, error) {
+	var p ChangeProposal
+	if err := json.Unmarshal([]byte(s), &p); err != nil {
+		return ChangeProposal{}, err
+	}
+	return p, nil
 }

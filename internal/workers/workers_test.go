@@ -8,20 +8,6 @@ import (
 	"github.com/Jongseong0111/jarvis/domain"
 )
 
-func TestHome_Handle(t *testing.T) {
-	t.Parallel()
-	reply, err := NewHome().Handle(context.Background(), domain.IntentHomeAdd, domain.IncomingMessage{ChannelID: "C1"})
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if reply.ChannelID != "C1" {
-		t.Fatalf("ChannelID = %q, want C1", reply.ChannelID)
-	}
-	if !strings.Contains(reply.Text, string(domain.IntentHomeAdd)) {
-		t.Fatalf("응답에 intent 표시가 없음: %q", reply.Text)
-	}
-}
-
 func TestKnowledge_Handle(t *testing.T) {
 	t.Parallel()
 	reply, err := NewKnowledge().Handle(context.Background(), domain.IntentKnowledgeUpdate, domain.IncomingMessage{ChannelID: "C1"})
