@@ -14,10 +14,14 @@ import (
 // Client 는 Slack Socket Mode 연결을 관리하고 메시지를 송수신한다.
 // domain.MessageSender 를 구현한다.
 type Client struct {
-	api    *slackgo.Client
-	socket *socketmode.Client
-	botID  string
+	api         *slackgo.Client
+	socket      *socketmode.Client
+	botID       string
+	interaction *InteractionHandler // 버튼 클릭 처리(선택)
 }
+
+// SetInteractionHandler 는 버튼(interactive) 처리기를 연결한다.
+func (c *Client) SetInteractionHandler(h *InteractionHandler) { c.interaction = h }
 
 // NewClient 는 봇/앱 토큰으로 Socket Mode 클라이언트를 생성한다.
 func NewClient(botToken, appToken string) (*Client, error) {
@@ -33,9 +37,15 @@ func NewClient(botToken, appToken string) (*Client, error) {
 	}, nil
 }
 
-// Send 는 채널로 메시지를 전송한다.
+// Send 는 채널로 메시지를 전송한다. 버튼이 있으면 Block Kit 으로 전송한다.
 func (c *Client) Send(ctx context.Context, reply domain.Reply) error {
-	if _, _, err := c.api.PostMessageContext(ctx, reply.ChannelID, slackgo.MsgOptionText(reply.Text, false)); err != nil {
+	var opt slackgo.MsgOption
+	if len(reply.Buttons) > 0 {
+		opt = slackgo.MsgOptionBlocks(buildBlocks(reply)...)
+	} else {
+		opt = slackgo.MsgOptionText(reply.Text, false)
+	}
+	if _, _, err := c.api.PostMessageContext(ctx, reply.ChannelID, opt); err != nil {
 		return fmt.Errorf("slack 메시지 전송 실패: %w", err)
 	}
 	return nil
@@ -52,18 +62,33 @@ func (c *Client) Run(ctx context.Context, handler Handler) error {
 				if !ok {
 					return
 				}
-				if evt.Type != socketmode.EventTypeEventsAPI {
+				switch evt.Type {
+				case socketmode.EventTypeEventsAPI:
+					eventsAPI, ok := evt.Data.(slackevents.EventsAPIEvent)
+					if !ok {
+						continue
+					}
+					// Ack 는 error 를 반환하므로 무시하지 않고 로깅한다.
+					if err := c.socket.Ack(*evt.Request); err != nil {
+						log.FromContext(ctx).Error("slack ack 실패", "error", err)
+					}
+					c.dispatch(ctx, eventsAPI, handler)
+				case socketmode.EventTypeInteractive:
+					callback, ok := evt.Data.(slackgo.InteractionCallback)
+					if !ok {
+						continue
+					}
+					if err := c.socket.Ack(*evt.Request); err != nil {
+						log.FromContext(ctx).Error("slack ack 실패", "error", err)
+					}
+					if c.interaction != nil {
+						if err := c.interaction.Handle(ctx, callback); err != nil {
+							log.FromContext(ctx).Error("버튼 처리 실패", "error", err)
+						}
+					}
+				default:
 					continue
 				}
-				eventsAPI, ok := evt.Data.(slackevents.EventsAPIEvent)
-				if !ok {
-					continue
-				}
-				// Ack 는 error 를 반환하므로 무시하지 않고 로깅한다.
-				if err := c.socket.Ack(*evt.Request); err != nil {
-					log.FromContext(ctx).Error("slack ack 실패", "error", err)
-				}
-				c.dispatch(ctx, eventsAPI, handler)
 			}
 		}
 	}()
