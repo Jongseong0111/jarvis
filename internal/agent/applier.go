@@ -82,6 +82,17 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		}
 		return domain.Reply{Text: fmt.Sprintf("✅ '%s'을(를) 삭제했어.", f["item_name"])}, nil
 
+	case "delete_items":
+		if len(p.Items) == 0 {
+			return domain.Reply{}, fmt.Errorf("삭제할 물건이 없음")
+		}
+		for _, it := range p.Items {
+			if err := a.port.ArchiveItem(ctx, it["item_id"]); err != nil {
+				return domain.Reply{}, fmt.Errorf("'%s' 삭제 실패: %w", it["item_name"], err)
+			}
+		}
+		return domain.Reply{Text: fmt.Sprintf("✅ %d개를 정리했어.", len(p.Items))}, nil
+
 	case "add_location":
 		if f["name"] == "" || f["zone"] == "" {
 			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(name/zone 누락)")

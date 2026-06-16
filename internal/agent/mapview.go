@@ -53,10 +53,10 @@ func (r *MapRenderer) Render(ctx context.Context) error {
 }
 
 // zoneOrder 는 구역 표시 순서다(목록에 없는 구역은 뒤에 가나다순, "기타"는 맨 뒤).
-var zoneOrder = []string{"거실", "거실복도", "주방", "안방", "아기방", "로그방", "베란다", "창고", "욕실"}
+var zoneOrder = []string{"거실", "거실복도", "거실 복도", "주방", "안방", "아기방", "로그방", "베란다", "창고", "욕실"}
 
 var zoneEmoji = map[string]string{
-	"거실": "🛋️", "거실복도": "🚪", "주방": "🍳", "안방": "🛏️", "아기방": "🧸",
+	"거실": "🛋️", "거실복도": "🚪", "거실 복도": "🚪", "주방": "🍳", "안방": "🛏️", "아기방": "🧸",
 	"로그방": "💻", "베란다": "🌿", "창고": "📦", "욕실": "🚿", "기타": "📍",
 }
 
@@ -95,18 +95,28 @@ func buildMapBlocks(items []notion.Item, locs []notion.Location) []any {
 		return blocks
 	}
 
-	for _, zone := range orderedZones(zones) {
+	for zi, zone := range orderedZones(zones) {
 		emoji := zoneEmoji[zone]
 		if emoji == "" {
 			emoji = "📍"
 		}
+		if zi > 0 {
+			blocks = append(blocks, dividerBlock())
+		}
 		blocks = append(blocks, headingBlock(emoji+" "+zone))
+		color := zonePalette[zi%len(zonePalette)]
 		locsInZone := zones[zone]
 		for _, locName := range sortedKeys(locsInZone) {
-			blocks = append(blocks, mapLineBlock(locName, strings.Join(locsInZone[locName], " · ")))
+			blocks = append(blocks, locationCallout(locName, strings.Join(locsInZone[locName], " · "), color))
 		}
 	}
 	return blocks
+}
+
+// zonePalette 는 구역별로 돌아가며 쓰는 콜아웃 배경색이다.
+var zonePalette = []string{
+	"blue_background", "green_background", "orange_background", "purple_background",
+	"pink_background", "yellow_background", "brown_background", "red_background",
 }
 
 // orderedZones 는 zoneOrder 우선, 나머지는 가나다순, "기타"는 맨 뒤로 정렬한다.
@@ -179,16 +189,24 @@ func calloutBlock(emoji, text, color string) any {
 	}
 }
 
-// mapLineBlock 은 "**장소** — item1 · item2" 한 줄을 만든다.
-func mapLineBlock(loc, items string) any {
+// locationCallout 은 "📦 **장소**  item1 · item2" 카드형 콜아웃을 만든다.
+func locationCallout(loc, items, color string) any {
 	rt := []any{
-		map[string]any{"type": "text", "text": map[string]any{"content": loc + " "}, "annotations": map[string]any{"bold": true}},
-		map[string]any{"type": "text", "text": map[string]any{"content": "— " + items}},
+		map[string]any{"type": "text", "text": map[string]any{"content": loc + "  "}, "annotations": map[string]any{"bold": true}},
+		map[string]any{"type": "text", "text": map[string]any{"content": items}},
 	}
 	return map[string]any{
-		"object": "block", "type": "paragraph",
-		"paragraph": map[string]any{"rich_text": rt},
+		"object": "block", "type": "callout",
+		"callout": map[string]any{
+			"icon":      map[string]any{"type": "emoji", "emoji": "📦"},
+			"rich_text": rt,
+			"color":     color,
+		},
 	}
+}
+
+func dividerBlock() any {
+	return map[string]any{"object": "block", "type": "divider", "divider": map[string]any{}}
 }
 
 func richText(text string, bold bool) []any {
