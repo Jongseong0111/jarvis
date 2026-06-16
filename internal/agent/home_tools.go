@@ -31,6 +31,7 @@ func HomeTools(port HomePort, homeURL, mapURL string) []Tool {
 		h.addItems(),
 		h.updateItem(),
 		h.deleteItem(),
+		h.dedupeItems(),
 		h.deleteLocation(),
 	}
 	if homeURL != "" || mapURL != "" {
@@ -451,6 +452,44 @@ func (h homeTools) deleteItem() Tool {
 				Op:      "delete_item",
 				Summary: fmt.Sprintf("물건 삭제\n품목: %s", item.Name),
 				Fields:  map[string]string{"item_id": item.ID, "item_name": item.Name},
+			}, nil
+		},
+	}
+}
+
+func (h homeTools) dedupeItems() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "dedupe_items",
+			Description: "같은 이름+같은 장소로 두 번 이상 중복 등록된 물건을 하나만 남기고 정리한다. '중복 정리해줘', '하나씩 삭제해줘' 같은 요청에 사용.",
+			Parameters:  objSchema(map[string]*genai.Schema{}),
+		},
+		Propose: func(ctx context.Context, _ map[string]any) (domain.ChangeProposal, error) {
+			items, err := h.port.Items(ctx)
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			groups := map[string][]notion.Item{}
+			for _, it := range items {
+				groups[it.Name+"|"+it.LocationID] = append(groups[it.Name+"|"+it.LocationID], it)
+			}
+			var dups []map[string]string
+			var lines []string
+			for _, g := range groups {
+				for _, extra := range g[1:] { // 첫 개는 남기고 나머지 삭제
+					dups = append(dups, map[string]string{"item_id": extra.ID, "item_name": extra.Name})
+					lines = append(lines, "• "+extra.Name)
+				}
+			}
+			if len(dups) == 0 {
+				return domain.ChangeProposal{}, fmt.Errorf("중복된 물건이 없어.")
+			}
+			sort.Strings(lines)
+			return domain.ChangeProposal{
+				Op:      "delete_items",
+				Summary: fmt.Sprintf("중복 정리 — %d개 삭제(각 항목 1개씩 남김)\n%s", len(dups), strings.Join(lines, "\n")),
+				Items:   dups,
 			}, nil
 		},
 	}
