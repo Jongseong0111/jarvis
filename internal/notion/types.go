@@ -70,6 +70,7 @@ type Item struct {
 	Name       string
 	CategoryID string // 카테고리(relation) 첫 ID
 	LocationID string // 현재위치(relation) 첫 ID
+	Zone       string // 구역(select, 비정규화)
 	Quantity   *int
 }
 
@@ -92,6 +93,7 @@ func ParseItem(p Page) Item {
 		Name:       titleOf(p, PropName),
 		CategoryID: firstRelationOf(p, PropCategory),
 		LocationID: firstRelationOf(p, PropLocation),
+		Zone:       selectOf(p, PropZone),
 		Quantity:   numberOf(p, PropQuantity),
 	}
 }
@@ -143,6 +145,16 @@ func ItemProperties(name, categoryID, locationID, zone string, quantity *int) ma
 	}
 	if quantity != nil {
 		props[PropQuantity] = map[string]any{"number": *quantity}
+	}
+	return props
+}
+
+// LocationProperties 는 Locations DB page 생성을 위한 properties 맵을 만든다.
+// zone(구역 select)이 비면 넣지 않는다.
+func LocationProperties(name, zone string) map[string]any {
+	props := map[string]any{PropName: titleProp(name)}
+	if zone != "" {
+		props[PropZone] = map[string]any{"select": map[string]any{"name": zone}}
 	}
 	return props
 }
