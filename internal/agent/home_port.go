@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Jongseong0111/jarvis/internal/notion"
 )
@@ -15,6 +16,7 @@ type HomePort interface {
 	SearchItems(ctx context.Context, name string) ([]notion.Item, error)
 	CreateItem(ctx context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error)
 	CreateLocation(ctx context.Context, name, zone string) (string, error)
+	EnsureCategory(ctx context.Context, name string) (string, error) // 이름으로 찾고 없으면 생성
 	UpdateItem(ctx context.Context, itemID, categoryID, locationID, zone string, quantity *int) error
 	ArchiveItem(ctx context.Context, itemID string) error
 	ArchiveLocation(ctx context.Context, locationID string) error
@@ -93,6 +95,20 @@ func (h NotionHome) CreateItem(ctx context.Context, name, categoryID, locationID
 // CreateLocation 은 장소 DB 에 page 를 생성한다.
 func (h NotionHome) CreateLocation(ctx context.Context, name, zone string) (string, error) {
 	return h.client.CreatePage(ctx, h.locationsDB, notion.LocationProperties(name, zone))
+}
+
+// EnsureCategory 는 이름으로 카테고리를 찾고, 없으면 새로 만들어 page ID 를 반환한다.
+func (h NotionHome) EnsureCategory(ctx context.Context, name string) (string, error) {
+	cats, err := h.Categories(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, c := range cats {
+		if strings.EqualFold(c.Name, name) {
+			return c.ID, nil
+		}
+	}
+	return h.client.CreatePage(ctx, h.categoriesDB, notion.CategoryProperties(name))
 }
 
 // UpdateItem 은 물건의 카테고리/위치/구역/수량을 갱신한다(빈 값은 변경 안 함).

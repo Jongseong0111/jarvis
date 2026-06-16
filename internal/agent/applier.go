@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Jongseong0111/jarvis/domain"
 	"github.com/Jongseong0111/jarvis/pkg/log"
@@ -42,13 +43,11 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		if f["name"] == "" || f["location_id"] == "" {
 			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(item/location 누락)")
 		}
-		var q *int
-		if s := f["quantity"]; s != "" {
-			if n, err := strconv.Atoi(s); err == nil {
-				q = &n
-			}
+		catID, err := a.ensureCat(ctx, nil, f["category_name"])
+		if err != nil {
+			return domain.Reply{}, fmt.Errorf("카테고리 처리 실패: %w", err)
 		}
-		if _, err := a.port.CreateItem(ctx, f["name"], f["category_id"], f["location_id"], f["zone"], q); err != nil {
+		if _, err := a.port.CreateItem(ctx, f["name"], catID, f["location_id"], f["zone"], parseQty(f["quantity"])); err != nil {
 			return domain.Reply{}, fmt.Errorf("물건 추가 실패: %w", err)
 		}
 		return domain.Reply{Text: fmt.Sprintf("✅ '%s'을(를) %s에 추가했어.", f["name"], f["location_name"])}, nil
@@ -57,8 +56,13 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		if len(p.Items) == 0 {
 			return domain.Reply{}, fmt.Errorf("추가할 물건이 없음")
 		}
+		cache := map[string]string{} // 같은 카테고리 중복 생성 방지
 		for _, it := range p.Items {
-			if _, err := a.port.CreateItem(ctx, it["name"], it["category_id"], it["location_id"], it["zone"], parseQty(it["quantity"])); err != nil {
+			catID, err := a.ensureCat(ctx, cache, it["category_name"])
+			if err != nil {
+				return domain.Reply{}, fmt.Errorf("카테고리 처리 실패: %w", err)
+			}
+			if _, err := a.port.CreateItem(ctx, it["name"], catID, it["location_id"], it["zone"], parseQty(it["quantity"])); err != nil {
 				return domain.Reply{}, fmt.Errorf("'%s' 추가 실패: %w", it["name"], err)
 			}
 		}
@@ -68,7 +72,11 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		if f["item_id"] == "" {
 			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(item_id 누락)")
 		}
-		if err := a.port.UpdateItem(ctx, f["item_id"], f["category_id"], f["location_id"], f["zone"], parseQty(f["quantity"])); err != nil {
+		catID, err := a.ensureCat(ctx, nil, f["category_name"])
+		if err != nil {
+			return domain.Reply{}, fmt.Errorf("카테고리 처리 실패: %w", err)
+		}
+		if err := a.port.UpdateItem(ctx, f["item_id"], catID, f["location_id"], f["zone"], parseQty(f["quantity"])); err != nil {
 			return domain.Reply{}, fmt.Errorf("물건 수정 실패: %w", err)
 		}
 		return domain.Reply{Text: fmt.Sprintf("✅ '%s'을(를) 수정했어.", f["item_name"])}, nil
@@ -114,6 +122,27 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 	default:
 		return domain.Reply{}, fmt.Errorf("알 수 없는 변경안: %s", p.Op)
 	}
+}
+
+// ensureCat 은 카테고리 이름을 page ID 로 바꾼다(없으면 생성). 빈 이름이면 "". cache 로 일괄 중복 생성 방지.
+func (a HomeApplier) ensureCat(ctx context.Context, cache map[string]string, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", nil
+	}
+	if cache != nil {
+		if id, ok := cache[name]; ok {
+			return id, nil
+		}
+	}
+	id, err := a.port.EnsureCategory(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	if cache != nil {
+		cache[name] = id
+	}
+	return id, nil
 }
 
 // parseQty 는 문자열 수량을 *int 로 바꾼다(빈 값/오류면 nil).

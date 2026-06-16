@@ -300,15 +300,8 @@ func (h homeTools) addItem() Tool {
 			summary := fmt.Sprintf("물건 추가\n품목: %s\n위치: %s", name, locWithZone(*loc))
 
 			if catName := strings.TrimSpace(strArg(args, "category")); catName != "" {
-				cats, err := h.port.Categories(ctx)
-				if err != nil {
-					return domain.ChangeProposal{}, err
-				}
-				if cat := findCategory(cats, catName); cat != nil {
-					fields["category_id"] = cat.ID
-					fields["category_name"] = cat.Name
-					summary += "\n카테고리: " + cat.Name
-				}
+				fields["category_name"] = catName // 없으면 적용 시 자동 생성
+				summary += "\n카테고리: " + catName
 			}
 			if q := intArg(args, "quantity"); q != nil {
 				fields["quantity"] = strconv.Itoa(*q)
@@ -343,10 +336,6 @@ func (h homeTools) addItems() Tool {
 			if err != nil {
 				return domain.ChangeProposal{}, err
 			}
-			cats, err := h.port.Categories(ctx)
-			if err != nil {
-				return domain.ChangeProposal{}, err
-			}
 			var items []map[string]string
 			var lines []string
 			for _, r := range raw {
@@ -363,10 +352,8 @@ func (h homeTools) addItems() Tool {
 				f := map[string]string{"name": name, "location_id": loc.ID, "location_name": loc.Name, "zone": loc.Zone}
 				line := fmt.Sprintf("• %s → %s", name, locWithZone(*loc))
 				if catName := strings.TrimSpace(strArg(m, "category")); catName != "" {
-					if cat := findCategory(cats, catName); cat != nil {
-						f["category_id"] = cat.ID
-						f["category_name"] = cat.Name
-					}
+					f["category_name"] = catName // 없으면 적용 시 자동 생성
+					line += " [" + catName + "]"
 				}
 				if q := intArg(m, "quantity"); q != nil {
 					f["quantity"] = strconv.Itoa(*q)
@@ -419,16 +406,8 @@ func (h homeTools) updateItem() Tool {
 				changes = append(changes, "위치 → "+locWithZone(*loc))
 			}
 			if catName := strings.TrimSpace(strArg(args, "category")); catName != "" {
-				cats, err := h.port.Categories(ctx)
-				if err != nil {
-					return domain.ChangeProposal{}, err
-				}
-				cat := findCategory(cats, catName)
-				if cat == nil {
-					return domain.ChangeProposal{}, fmt.Errorf("'%s' 카테고리를 못 찾았어. 등록된 카테고리: %s", catName, strings.Join(categoryNames(cats), ", "))
-				}
-				fields["category_id"] = cat.ID
-				changes = append(changes, "카테고리 → "+cat.Name)
+				fields["category_name"] = catName // 없으면 적용 시 자동 생성
+				changes = append(changes, "카테고리 → "+catName)
 			}
 			if q := intArg(args, "quantity"); q != nil {
 				fields["quantity"] = strconv.Itoa(*q)
