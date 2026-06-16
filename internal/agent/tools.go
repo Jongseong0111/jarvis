@@ -49,6 +49,10 @@ func intSchema(desc string) *genai.Schema {
 	return &genai.Schema{Type: genai.TypeInteger, Description: desc}
 }
 
+func arraySchema(item *genai.Schema) *genai.Schema {
+	return &genai.Schema{Type: genai.TypeArray, Items: item}
+}
+
 // toolDecls 는 도구 목록에서 genai 도구 선언을 만든다.
 func toolDecls(tools []Tool) []*genai.Tool {
 	decls := make([]*genai.FunctionDeclaration, len(tools))

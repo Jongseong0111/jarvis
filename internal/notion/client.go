@@ -84,12 +84,32 @@ func (c *Client) CreatePage(ctx context.Context, dbID string, props map[string]a
 	return out.ID, nil
 }
 
+// UpdatePage 는 page 의 properties 를 갱신한다.
+func (c *Client) UpdatePage(ctx context.Context, pageID string, props map[string]any) error {
+	var out createResponse
+	return c.patch(ctx, "/v1/pages/"+pageID, map[string]any{"properties": props}, &out)
+}
+
+// ArchivePage 는 page 를 보관(삭제) 처리한다.
+func (c *Client) ArchivePage(ctx context.Context, pageID string) error {
+	var out createResponse
+	return c.patch(ctx, "/v1/pages/"+pageID, map[string]any{"archived": true}, &out)
+}
+
 func (c *Client) post(ctx context.Context, path string, body, out any) error {
+	return c.do(ctx, http.MethodPost, path, body, out)
+}
+
+func (c *Client) patch(ctx context.Context, path string, body, out any) error {
+	return c.do(ctx, http.MethodPatch, path, body, out)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("notion 요청 직렬화 실패: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(b))
 	if err != nil {
 		return fmt.Errorf("notion 요청 생성 실패: %w", err)
 	}

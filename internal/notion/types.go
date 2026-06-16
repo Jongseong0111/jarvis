@@ -149,6 +149,21 @@ func ItemProperties(name, categoryID, locationID, zone string, quantity *int) ma
 	return props
 }
 
+// ItemUpdateProperties 는 물건 수정용 부분 properties 맵이다. 빈 값/ nil 은 포함하지 않는다.
+func ItemUpdateProperties(locationID, zone string, quantity *int) map[string]any {
+	props := map[string]any{}
+	if locationID != "" {
+		props[PropLocation] = relationProp(locationID)
+	}
+	if zone != "" {
+		props[PropZone] = map[string]any{"select": map[string]any{"name": zone}}
+	}
+	if quantity != nil {
+		props[PropQuantity] = map[string]any{"number": *quantity}
+	}
+	return props
+}
+
 // LocationProperties 는 Locations DB page 생성을 위한 properties 맵을 만든다.
 // zone(구역 select)이 비면 넣지 않는다. 타입은 Storage 로 기본 지정한다(자리=수납).
 func LocationProperties(name, zone string) map[string]any {

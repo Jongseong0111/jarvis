@@ -39,11 +39,13 @@ func callResp(name string, args map[string]any) *genai.GenerateContentResponse {
 }
 
 type fakeHomePort struct {
-	locations  []notion.Location
-	categories []notion.Category
-	items      []notion.Item
-	search     []notion.Item
-	createdLoc *[2]string // name, zone
+	locations    []notion.Location
+	categories   []notion.Category
+	items        []notion.Item
+	search       []notion.Item
+	createdLoc   *[2]string // name, zone
+	updatedItem  string
+	archivedItem string
 }
 
 func (f *fakeHomePort) Locations(context.Context) ([]notion.Location, error) { return f.locations, nil }
@@ -61,6 +63,15 @@ func (f *fakeHomePort) CreateLocation(_ context.Context, name, zone string) (str
 	f.createdLoc = &[2]string{name, zone}
 	return "loc-id", nil
 }
+func (f *fakeHomePort) UpdateItem(_ context.Context, itemID, _, _ string, _ *int) error {
+	f.updatedItem = itemID
+	return nil
+}
+func (f *fakeHomePort) ArchiveItem(_ context.Context, itemID string) error {
+	f.archivedItem = itemID
+	return nil
+}
+func (f *fakeHomePort) ArchiveLocation(_ context.Context, _ string) error { return nil }
 
 func newAgent(gen generator, port HomePort) Agent {
 	return New(gen, HomeTools(port, ""), "")
@@ -162,6 +173,50 @@ func TestAgent_maxTurns(t *testing.T) {
 	}
 	if !strings.Contains(reply.Text, "복잡한") {
 		t.Fatalf("상한 응답 = %q", reply.Text)
+	}
+}
+
+func TestAgent_deleteItem_proposal(t *testing.T) {
+	t.Parallel()
+	port := &fakeHomePort{search: []notion.Item{{ID: "item-1", Name: "체온계", LocationID: "loc-1"}}}
+	gen := &fakeGen{responses: []*genai.GenerateContentResponse{
+		callResp("delete_item", map[string]any{"name": "체온계"}),
+	}}
+	a := newAgent(gen, port)
+	reply, err := a.Route(context.Background(), domain.IncomingMessage{ChannelID: "C1", Text: "체온계 버렸어"})
+	if err != nil {
+		t.Fatalf("Route: %v", err)
+	}
+	p, err := domain.DecodeProposal(reply.Buttons[0].Value)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if p.Op != "delete_item" || p.Fields["item_id"] != "item-1" {
+		t.Fatalf("변경안 = %+v", p)
+	}
+}
+
+func TestHomeApplier_updateAndDelete(t *testing.T) {
+	t.Parallel()
+	port := &fakeHomePort{}
+	ap := NewHomeApplier(port)
+
+	if _, err := ap.Apply(context.Background(), domain.ChangeProposal{
+		Op: "update_item", Fields: map[string]string{"item_id": "it-9", "item_name": "체온계", "location_id": "loc-2"},
+	}); err != nil {
+		t.Fatalf("update Apply: %v", err)
+	}
+	if port.updatedItem != "it-9" {
+		t.Fatalf("UpdateItem 미호출: %q", port.updatedItem)
+	}
+
+	if _, err := ap.Apply(context.Background(), domain.ChangeProposal{
+		Op: "delete_item", Fields: map[string]string{"item_id": "it-9", "item_name": "체온계"},
+	}); err != nil {
+		t.Fatalf("delete Apply: %v", err)
+	}
+	if port.archivedItem != "it-9" {
+		t.Fatalf("ArchiveItem 미호출: %q", port.archivedItem)
 	}
 }
 
