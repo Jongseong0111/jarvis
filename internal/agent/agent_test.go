@@ -63,7 +63,7 @@ func (f *fakeHomePort) CreateLocation(_ context.Context, name, zone string) (str
 }
 
 func newAgent(gen generator, port HomePort) Agent {
-	return New(gen, HomeTools(port), "")
+	return New(gen, HomeTools(port, ""), "")
 }
 
 // --- tests ---
