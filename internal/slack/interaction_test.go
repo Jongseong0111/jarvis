@@ -21,7 +21,7 @@ func (f *fakeApplier) Apply(_ context.Context, p domain.ChangeProposal) (domain.
 
 func TestInteraction_resolve(t *testing.T) {
 	t.Parallel()
-	validValue := domain.ChangeProposal{Action: "add", ItemName: "체온계", LocationID: "loc-1", LocationName: "아기 트롤리"}.Encode()
+	validValue := domain.ChangeProposal{Op: "add_item", Summary: "체온계 추가", Fields: map[string]string{"name": "체온계", "location_id": "loc-1", "location_name": "아기 트롤리"}}.Encode()
 
 	tests := []struct {
 		name      string
@@ -60,7 +60,7 @@ func TestInteraction_resolve(t *testing.T) {
 			if reply.Text != tt.wantText {
 				t.Fatalf("Text = %q, want %q", reply.Text, tt.wantText)
 			}
-			if tt.wantApply && ap.got.ItemName != "체온계" {
+			if tt.wantApply && ap.got.Fields["name"] != "체온계" {
 				t.Fatalf("Apply 에 전달된 변경안 = %+v", ap.got)
 			}
 		})

@@ -7,12 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Jongseong0111/jarvis/domain"
+	"github.com/Jongseong0111/jarvis/internal/agent"
 	"github.com/Jongseong0111/jarvis/internal/gemini"
 	"github.com/Jongseong0111/jarvis/internal/notion"
-	"github.com/Jongseong0111/jarvis/internal/router"
 	"github.com/Jongseong0111/jarvis/internal/slack"
-	"github.com/Jongseong0111/jarvis/internal/workers"
 	"github.com/Jongseong0111/jarvis/pkg/config"
 	"github.com/Jongseong0111/jarvis/pkg/log"
 )
@@ -32,29 +30,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 공유 Gemini 클라이언트(분류 + 추출)
+	// 도구를 가진 LLM 에이전트(자연 대화 + 집정리 도구)
 	geminiClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel)
-	classifier := router.NewGeminiClassifierWith(geminiClient)
-
-	// 집 정리: Notion 어댑터 + Gemini 추출기
-	notionAdapter := workers.NewNotionAdapter(
+	home := agent.NewNotionHome(
 		notion.New(cfg.NotionAPIKey),
 		cfg.NotionLocationsDBID, cfg.NotionCategoriesDBID, cfg.NotionItemsDBID,
 	)
-	homeWorker := workers.NewHome(notionAdapter, workers.NewGeminiExtractor(geminiClient))
+	ag := agent.New(geminiClient, agent.HomeTools(home), "")
+	handler := slack.NewHandler(ag, client)
 
-	msgRouter := router.NewRouter(
-		classifier,
-		map[string]domain.Worker{
-			"home":      homeWorker,
-			"knowledge": workers.NewKnowledge(),
-		},
-		workers.NewSystem(), // system.* 및 매핑 없는 intent fallback
-	)
-	handler := slack.NewHandler(msgRouter, client)
-
-	// 버튼 승인 처리(home 변경안 적용). applier=homeWorker, sender=client
-	client.SetInteractionHandler(slack.NewInteractionHandler(homeWorker, client))
+	// 버튼 승인 처리(변경안 적용). applier=HomeApplier, sender=client
+	client.SetInteractionHandler(slack.NewInteractionHandler(agent.NewHomeApplier(home), client))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

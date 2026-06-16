@@ -1,5 +1,4 @@
 // Package gemini 는 Gemini(genai) 호출을 감싸는 공유 클라이언트다.
-// 의도 분류(enum)와 구조화 추출(JSON)에서 공용으로 쓴다.
 package gemini
 
 import (
@@ -14,7 +13,7 @@ import (
 // DefaultModel 은 model 미지정 시 사용하는 기본 모델이다.
 const DefaultModel = "gemini-2.5-flash-lite"
 
-const requestTimeout = 15 * time.Second
+const requestTimeout = 30 * time.Second
 
 // Client 는 Gemini API 호출을 감싼다.
 type Client struct {
@@ -30,17 +29,9 @@ func New(apiKey, model string) *Client {
 	return &Client{apiKey: apiKey, model: model}
 }
 
-// GenerateEnum 은 출력을 enum 값 중 하나로 제약해 생성한다.
-func (c *Client) GenerateEnum(ctx context.Context, prompt string, enum []string) (string, error) {
-	return c.generate(ctx, prompt, "text/x.enum", &genai.Schema{Type: genai.TypeString, Enum: enum})
-}
-
-// GenerateJSON 은 출력을 주어진 schema 의 JSON 으로 제약해 생성한다.
-func (c *Client) GenerateJSON(ctx context.Context, prompt string, schema *genai.Schema) (string, error) {
-	return c.generate(ctx, prompt, "application/json", schema)
-}
-
-func (c *Client) generate(ctx context.Context, prompt, mime string, schema *genai.Schema) (string, error) {
+// GenerateWithTools 는 도구(function declarations)와 함께 생성한다.
+// 응답에는 텍스트 또는 FunctionCall 파트가 담긴다(에이전트 루프가 해석).
+func (c *Client) GenerateWithTools(ctx context.Context, contents []*genai.Content, tools []*genai.Tool, systemPrompt string) (*genai.GenerateContentResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
@@ -49,22 +40,21 @@ func (c *Client) generate(ctx context.Context, prompt, mime string, schema *gena
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
-		return "", fmt.Errorf("gemini 클라이언트 생성 실패: %w", err)
+		return nil, fmt.Errorf("gemini 클라이언트 생성 실패: %w", err)
 	}
 
 	temp := float32(0)
-	resp, err := client.Models.GenerateContent(
-		ctx,
-		c.model,
-		genai.Text(prompt),
-		&genai.GenerateContentConfig{
-			Temperature:      &temp,
-			ResponseMIMEType: mime,
-			ResponseSchema:   schema,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("gemini 생성 실패: %w", err)
+	cfg := &genai.GenerateContentConfig{
+		Temperature: &temp,
+		Tools:       tools,
 	}
-	return resp.Text(), nil
+	if systemPrompt != "" {
+		cfg.SystemInstruction = &genai.Content{Parts: []*genai.Part{{Text: systemPrompt}}}
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, c.model, contents, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("gemini 생성 실패: %w", err)
+	}
+	return resp, nil
 }
