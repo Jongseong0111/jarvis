@@ -63,7 +63,7 @@ func (f *fakeHomePort) CreateLocation(_ context.Context, name, zone string) (str
 	f.createdLoc = &[2]string{name, zone}
 	return "loc-id", nil
 }
-func (f *fakeHomePort) UpdateItem(_ context.Context, itemID, _, _ string, _ *int) error {
+func (f *fakeHomePort) UpdateItem(_ context.Context, itemID, _, _, _ string, _ *int) error {
 	f.updatedItem = itemID
 	return nil
 }

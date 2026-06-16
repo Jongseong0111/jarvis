@@ -14,12 +14,13 @@ func TestBuildMapBlocks(t *testing.T) {
 		{ID: "l1", Name: "아기 트롤리", Zone: "거실"},
 		{ID: "l2", Name: "베란다 수납장2", Zone: "베란다"},
 	}
+	cats := []notion.Category{{ID: "c1", Name: "청소용품"}}
 	items := []notion.Item{
 		{Name: "체온계", LocationID: "l1", Zone: "거실"},
 		{Name: "가위", LocationID: "l1", Zone: "거실"},
-		{Name: "세제", LocationID: "l2", Zone: "베란다"},
+		{Name: "세제", LocationID: "l2", Zone: "베란다", CategoryID: "c1"},
 	}
-	blocks := buildMapBlocks(items, locs)
+	blocks := buildMapBlocks(items, locs, cats)
 	b, _ := json.Marshal(blocks)
 	s := string(b)
 
@@ -37,7 +38,7 @@ func TestBuildMapBlocks(t *testing.T) {
 
 func TestBuildMapBlocks_empty(t *testing.T) {
 	t.Parallel()
-	blocks := buildMapBlocks(nil, nil)
+	blocks := buildMapBlocks(nil, nil, nil)
 	b, _ := json.Marshal(blocks)
 	if !strings.Contains(string(b), "아직 등록된 물건이 없어요") {
 		t.Fatalf("빈 상태 안내가 없음: %s", string(b))
