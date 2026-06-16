@@ -73,11 +73,13 @@ func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Rep
 		if tool.Write {
 			p, err := tool.Propose(ctx, fc.Args)
 			if err != nil {
-				// resolve 실패 등 → 모델에 알려주고 되묻게 한다.
+				// resolve 실패 등 → 모델에 알려주고 되묻게 한다. 모델이 빈 응답이면 이 사유를 보여준다.
+				lastResult = err.Error()
 				contents = append(contents, modelContent, funcResp(fc.Name, map[string]any{"error": err.Error()}))
 				continue
 			}
-			a.mem.add(in.ChannelID, in.Text, "[변경안 제안] "+p.Summary)
+			// 메모리엔 변경안 원문을 넣지 않는다(모델이 그 형식을 텍스트로 흉내 내는 것 방지).
+			a.mem.add(in.ChannelID, in.Text, "(승인 버튼이 있는 변경안을 사용자에게 보냈다)")
 			return proposalReply(in.ChannelID, p), nil
 		}
 

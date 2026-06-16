@@ -28,6 +28,10 @@ func HomeTools(port HomePort, homeURL string) []Tool {
 		h.listCategories(),
 		h.addLocation(),
 		h.addItem(),
+		h.addItems(),
+		h.updateItem(),
+		h.deleteItem(),
+		h.deleteLocation(),
 	}
 	if homeURL != "" {
 		tools = append(tools, linkTool(homeURL))
@@ -305,6 +309,192 @@ func (h homeTools) addItem() Tool {
 			return domain.ChangeProposal{Op: "add_item", Summary: summary, Fields: fields}, nil
 		},
 	}
+}
+
+func (h homeTools) addItems() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "add_items",
+			Description: "여러 물건을 한 번에 등록한다. 한 메시지에 물건이 2개 이상이면 이 도구를 쓴다.",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"items": arraySchema(objSchema(map[string]*genai.Schema{
+					"name":     strSchema("물건 이름"),
+					"location": strSchema("등록된 장소 이름"),
+					"category": strSchema("카테고리 이름(선택)"),
+					"quantity": intSchema("수량(선택)"),
+				}, "name", "location")),
+			}, "items"),
+		},
+		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
+			raw, _ := args["items"].([]any)
+			if len(raw) == 0 {
+				return domain.ChangeProposal{}, fmt.Errorf("추가할 물건이 없어")
+			}
+			locs, err := h.port.Locations(ctx)
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			cats, err := h.port.Categories(ctx)
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			var items []map[string]string
+			var lines []string
+			for _, r := range raw {
+				m, _ := r.(map[string]any)
+				name := strings.TrimSpace(strArg(m, "name"))
+				locName := strings.TrimSpace(strArg(m, "location"))
+				if name == "" || locName == "" {
+					return domain.ChangeProposal{}, fmt.Errorf("물건 이름과 장소가 필요해")
+				}
+				loc := findLocation(locs, locName)
+				if loc == nil {
+					return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", locName, strings.Join(locationNames(locs), ", "))
+				}
+				f := map[string]string{"name": name, "location_id": loc.ID, "location_name": loc.Name, "zone": loc.Zone}
+				line := fmt.Sprintf("• %s → %s", name, locWithZone(*loc))
+				if catName := strings.TrimSpace(strArg(m, "category")); catName != "" {
+					if cat := findCategory(cats, catName); cat != nil {
+						f["category_id"] = cat.ID
+						f["category_name"] = cat.Name
+					}
+				}
+				if q := intArg(m, "quantity"); q != nil {
+					f["quantity"] = strconv.Itoa(*q)
+					line += fmt.Sprintf(" (%d개)", *q)
+				}
+				items = append(items, f)
+				lines = append(lines, line)
+			}
+			return domain.ChangeProposal{
+				Op:      "add_items",
+				Summary: "물건 일괄 추가\n" + strings.Join(lines, "\n"),
+				Items:   items,
+			}, nil
+		},
+	}
+}
+
+func (h homeTools) updateItem() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "update_item",
+			Description: "물건의 위치를 옮기거나 수량을 바꾼다. 수량은 최종 값(절대값)으로 넣는다. 'N개 썼다'면 먼저 search_item 으로 현재 수량을 확인한 뒤 줄어든 값을 넣어라.",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"name":     strSchema("바꿀 물건 이름"),
+				"location": strSchema("옮길 장소 이름(선택)"),
+				"quantity": intSchema("최종 수량(선택)"),
+			}, "name"),
+		},
+		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
+			item, err := h.resolveItem(ctx, strArg(args, "name"))
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			fields := map[string]string{"item_id": item.ID, "item_name": item.Name}
+			var changes []string
+			if locName := strings.TrimSpace(strArg(args, "location")); locName != "" {
+				locs, err := h.port.Locations(ctx)
+				if err != nil {
+					return domain.ChangeProposal{}, err
+				}
+				loc := findLocation(locs, locName)
+				if loc == nil {
+					return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", locName, strings.Join(locationNames(locs), ", "))
+				}
+				fields["location_id"] = loc.ID
+				fields["location_name"] = loc.Name
+				fields["zone"] = loc.Zone
+				changes = append(changes, "위치 → "+locWithZone(*loc))
+			}
+			if q := intArg(args, "quantity"); q != nil {
+				fields["quantity"] = strconv.Itoa(*q)
+				changes = append(changes, fmt.Sprintf("수량 → %d", *q))
+			}
+			if len(changes) == 0 {
+				return domain.ChangeProposal{}, fmt.Errorf("뭘 바꿀지 알려줘(위치나 수량)")
+			}
+			return domain.ChangeProposal{
+				Op:      "update_item",
+				Summary: fmt.Sprintf("물건 수정\n품목: %s\n%s", item.Name, strings.Join(changes, "\n")),
+				Fields:  fields,
+			}, nil
+		},
+	}
+}
+
+func (h homeTools) deleteItem() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "delete_item",
+			Description: "물건을 목록에서 삭제(뺐다/버렸다)한다.",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"name": strSchema("삭제할 물건 이름"),
+			}, "name"),
+		},
+		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
+			item, err := h.resolveItem(ctx, strArg(args, "name"))
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			return domain.ChangeProposal{
+				Op:      "delete_item",
+				Summary: fmt.Sprintf("물건 삭제\n품목: %s", item.Name),
+				Fields:  map[string]string{"item_id": item.ID, "item_name": item.Name},
+			}, nil
+		},
+	}
+}
+
+func (h homeTools) deleteLocation() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "delete_location",
+			Description: "장소(자리)를 삭제한다.",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"name": strSchema("삭제할 장소 이름"),
+			}, "name"),
+		},
+		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
+			locs, err := h.port.Locations(ctx)
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			loc := findLocation(locs, strArg(args, "name"))
+			if loc == nil {
+				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어.", strArg(args, "name"))
+			}
+			return domain.ChangeProposal{
+				Op:      "delete_location",
+				Summary: fmt.Sprintf("장소 삭제\n이름: %s", loc.Name),
+				Fields:  map[string]string{"location_id": loc.ID, "location_name": loc.Name},
+			}, nil
+		},
+	}
+}
+
+// resolveItem 은 이름으로 물건 1개를 찾는다. 0개/여러 개면 에러(에이전트가 되묻기).
+func (h homeTools) resolveItem(ctx context.Context, name string) (notion.Item, error) {
+	name = strings.TrimSpace(name)
+	items, err := h.port.SearchItems(ctx, name)
+	if err != nil {
+		return notion.Item{}, err
+	}
+	if len(items) == 0 {
+		return notion.Item{}, fmt.Errorf("'%s'을(를) 못 찾았어.", name)
+	}
+	if len(items) > 1 {
+		var names []string
+		for _, it := range items {
+			names = append(names, it.Name)
+		}
+		return notion.Item{}, fmt.Errorf("'%s'에 해당하는 게 여러 개야: %s. 더 정확히 알려줄래?", name, strings.Join(names, ", "))
+	}
+	return items[0], nil
 }
 
 // --- 순수 helper ---
