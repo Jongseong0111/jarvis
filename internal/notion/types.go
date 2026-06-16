@@ -128,14 +128,18 @@ func numberOf(p Page, key string) *int {
 // --- CreatePage property 빌더 ---
 
 // ItemProperties 는 Items DB page 생성을 위한 properties 맵을 만든다.
-// categoryID/quantity 가 비면 해당 속성을 넣지 않는다.
-func ItemProperties(name, categoryID, locationID string, quantity *int) map[string]any {
+// categoryID/zone/quantity 가 비면 해당 속성을 넣지 않는다.
+// zone(구역 select)은 위치에서 끌어와 대시보드 그룹용으로 비정규화 저장한다.
+func ItemProperties(name, categoryID, locationID, zone string, quantity *int) map[string]any {
 	props := map[string]any{
 		PropName:     titleProp(name),
 		PropLocation: relationProp(locationID),
 	}
 	if categoryID != "" {
 		props[PropCategory] = relationProp(categoryID)
+	}
+	if zone != "" {
+		props[PropZone] = map[string]any{"select": map[string]any{"name": zone}}
 	}
 	if quantity != nil {
 		props[PropQuantity] = map[string]any{"number": *quantity}

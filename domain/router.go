@@ -70,6 +70,7 @@ type ChangeProposal struct {
 	CategoryName string `json:"category_name,omitempty"` // 표시용
 	LocationID   string `json:"location_id"`             // resolve 된 Notion page ID
 	LocationName string `json:"location_name"`           // 표시용
+	LocationZone string `json:"location_zone,omitempty"` // 구역(대시보드 그룹용)
 	Quantity     *int   `json:"quantity,omitempty"`
 }
 

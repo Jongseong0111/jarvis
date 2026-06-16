@@ -59,6 +59,6 @@ func (a NotionAdapter) SearchItems(ctx context.Context, name string) ([]notion.I
 }
 
 // CreateItem 은 물건 DB 에 page 를 생성한다.
-func (a NotionAdapter) CreateItem(ctx context.Context, name, categoryID, locationID string, quantity *int) (string, error) {
-	return a.client.CreatePage(ctx, a.itemsDB, notion.ItemProperties(name, categoryID, locationID, quantity))
+func (a NotionAdapter) CreateItem(ctx context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error) {
+	return a.client.CreatePage(ctx, a.itemsDB, notion.ItemProperties(name, categoryID, locationID, zone, quantity))
 }
