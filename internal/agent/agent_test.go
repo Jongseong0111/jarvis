@@ -74,7 +74,7 @@ func (f *fakeHomePort) ArchiveItem(_ context.Context, itemID string) error {
 func (f *fakeHomePort) ArchiveLocation(_ context.Context, _ string) error { return nil }
 
 func newAgent(gen generator, port HomePort) Agent {
-	return New(gen, HomeTools(port, ""), "")
+	return New(gen, HomeTools(port, "", ""), "")
 }
 
 // --- tests ---
@@ -199,7 +199,7 @@ func TestAgent_deleteItem_proposal(t *testing.T) {
 func TestHomeApplier_updateAndDelete(t *testing.T) {
 	t.Parallel()
 	port := &fakeHomePort{}
-	ap := NewHomeApplier(port)
+	ap := NewHomeApplier(port, nil)
 
 	if _, err := ap.Apply(context.Background(), domain.ChangeProposal{
 		Op: "update_item", Fields: map[string]string{"item_id": "it-9", "item_name": "체온계", "location_id": "loc-2"},
@@ -223,7 +223,7 @@ func TestHomeApplier_updateAndDelete(t *testing.T) {
 func TestHomeApplier_addLocation(t *testing.T) {
 	t.Parallel()
 	port := &fakeHomePort{}
-	reply, err := NewHomeApplier(port).Apply(context.Background(), domain.ChangeProposal{
+	reply, err := NewHomeApplier(port, nil).Apply(context.Background(), domain.ChangeProposal{
 		Op: "add_location", Fields: map[string]string{"name": "팬트리", "zone": "거실복도"},
 	})
 	if err != nil {

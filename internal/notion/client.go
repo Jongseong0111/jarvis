@@ -96,6 +96,93 @@ func (c *Client) ArchivePage(ctx context.Context, pageID string) error {
 	return c.patch(ctx, "/v1/pages/"+pageID, map[string]any{"archived": true}, &out)
 }
 
+// blockChildrenResponse 는 블록 자식 조회 응답이다.
+type blockChildrenResponse struct {
+	Results []struct {
+		ID string `json:"id"`
+	} `json:"results"`
+	HasMore    bool   `json:"has_more"`
+	NextCursor string `json:"next_cursor"`
+}
+
+// BlockChildren 은 블록(페이지)의 자식 블록 ID 목록을 반환한다.
+func (c *Client) BlockChildren(ctx context.Context, blockID string) ([]string, error) {
+	var ids []string
+	cursor := ""
+	for {
+		path := "/v1/blocks/" + blockID + "/children?page_size=100"
+		if cursor != "" {
+			path += "&start_cursor=" + cursor
+		}
+		var out blockChildrenResponse
+		if err := c.get(ctx, path, &out); err != nil {
+			return nil, err
+		}
+		for _, r := range out.Results {
+			ids = append(ids, r.ID)
+		}
+		if !out.HasMore || out.NextCursor == "" {
+			break
+		}
+		cursor = out.NextCursor
+	}
+	return ids, nil
+}
+
+// DeleteBlock 은 블록을 삭제한다.
+func (c *Client) DeleteBlock(ctx context.Context, blockID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/v1/blocks/"+blockID, nil)
+	if err != nil {
+		return fmt.Errorf("notion 요청 생성 실패: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Notion-Version", notionVersion)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("notion 블록 삭제 실패: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("notion 블록 삭제 오류(%d): %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// AppendBlocks 는 블록(페이지)에 자식 블록들을 추가한다(한 번에 최대 100개).
+func (c *Client) AppendBlocks(ctx context.Context, blockID string, children []any) error {
+	for i := 0; i < len(children); i += 100 {
+		end := i + 100
+		if end > len(children) {
+			end = len(children)
+		}
+		var out createResponse
+		if err := c.patch(ctx, "/v1/blocks/"+blockID+"/children", map[string]any{"children": children[i:end]}, &out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) get(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("notion 요청 생성 실패: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Notion-Version", notionVersion)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("notion 요청 실패: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("notion API 오류(%d): %s", resp.StatusCode, string(body))
+	}
+	return json.Unmarshal(body, out)
+}
+
 func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPost, path, body, out)
 }
