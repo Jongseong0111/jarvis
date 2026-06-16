@@ -15,11 +15,13 @@ const maxTurns = 6
 // DefaultSystemPrompt 는 에이전트의 기본 지시문이다.
 const DefaultSystemPrompt = `너는 사용자의 개인 비서 '자비스'다. 친근하고 간결한 한국어로 대화한다.
 
+핵심 규칙:
 - 인사나 잡담에는 도구 없이 자연스럽게 답한다.
-- 집 정리(물건/장소/구역/카테고리 조회·등록)는 제공된 도구를 사용한다.
-- 물건이나 장소를 등록할 때 location/zone 은 가능하면 기존 것에서 고른다. 애매하면 사용자에게 되묻는다.
-- 도구 실행 결과를 바탕으로 짧고 명확하게 답한다. 길게 설명하지 않는다.
-- 등록(쓰기)은 사용자 승인 후에만 반영되니, 도구를 호출하면 변경안이 만들어진다.`
+- 조회/등록 요청에는 **반드시 해당 도구를 호출**한다. "추가할게요", "알려드릴게요" 라고 말로만 답하고 도구를 안 부르면 안 된다. 실제 작업은 도구 호출로만 일어난다.
+- 정보가 충분하면(예: 장소 이름 + 구역) 곧장 도구를 호출한다. 부족할 때만 되묻는다.
+- 새 장소를 없던 구역에 추가하려면 add_location 의 zone 에 그 구역 이름을 그대로 넣으면 된다(구역은 자동 생성됨). "구역 먼저 만들고 장소 만들기"는 add_location 한 번이면 된다.
+- 등록(쓰기) 도구를 호출하면 사용자에게 승인 버튼이 가는 변경안이 만들어진다. 그러니 등록 요청이면 망설이지 말고 도구를 호출한다.
+- 도구 결과를 바탕으로 짧고 명확하게 답한다.`
 
 // generator 는 도구와 함께 생성하는 능력이다(테스트에서 fake 주입).
 type generator interface {
@@ -32,6 +34,7 @@ type Agent struct {
 	tools  map[string]Tool
 	decls  []*genai.Tool
 	system string
+	mem    *memory
 }
 
 // New 는 Agent 를 생성한다.
@@ -39,12 +42,12 @@ func New(gen generator, tools []Tool, system string) Agent {
 	if system == "" {
 		system = DefaultSystemPrompt
 	}
-	return Agent{gen: gen, tools: toolMap(tools), decls: toolDecls(tools), system: system}
+	return Agent{gen: gen, tools: toolMap(tools), decls: toolDecls(tools), system: system, mem: newMemory()}
 }
 
 // Route 는 메시지를 에이전트 루프로 처리한다(잡담→텍스트, 작업→도구/변경안).
 func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Reply, error) {
-	contents := genai.Text(in.Text)
+	contents := append(a.mem.get(in.ChannelID), genai.Text(in.Text)...)
 	lastResult := "" // 마지막 읽기 도구 결과(모델이 빈 응답일 때 fallback)
 
 	for turn := 0; turn < maxTurns; turn++ {
@@ -55,7 +58,9 @@ func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Rep
 
 		fc := firstFunctionCall(resp)
 		if fc == nil {
-			return domain.Reply{ChannelID: in.ChannelID, Text: finalText(resp, lastResult)}, nil
+			text := finalText(resp, lastResult)
+			a.mem.add(in.ChannelID, in.Text, text)
+			return domain.Reply{ChannelID: in.ChannelID, Text: text}, nil
 		}
 
 		modelContent := resp.Candidates[0].Content
@@ -72,6 +77,7 @@ func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Rep
 				contents = append(contents, modelContent, funcResp(fc.Name, map[string]any{"error": err.Error()}))
 				continue
 			}
+			a.mem.add(in.ChannelID, in.Text, "[변경안 제안] "+p.Summary)
 			return proposalReply(in.ChannelID, p), nil
 		}
 
