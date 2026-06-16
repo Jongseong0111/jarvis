@@ -60,7 +60,7 @@ func TestClient_CreatePage(t *testing.T) {
 	defer srv.Close()
 
 	qty := 4
-	props := ItemProperties("AAA 건전지", "cat-1", "loc-1", &qty)
+	props := ItemProperties("AAA 건전지", "cat-1", "loc-1", "로그방", &qty)
 	id, err := newTestClient(srv).CreatePage(context.Background(), "items-db", props)
 	if err != nil {
 		t.Fatalf("CreatePage: %v", err)
@@ -79,10 +79,13 @@ func TestClient_CreatePage(t *testing.T) {
 
 func TestItemProperties_optional(t *testing.T) {
 	t.Parallel()
-	// 카테고리/수량 없으면 해당 키 미포함
-	props := ItemProperties("체온계", "", "loc-2", nil)
+	// 카테고리/구역/수량 없으면 해당 키 미포함
+	props := ItemProperties("체온계", "", "loc-2", "", nil)
 	if _, ok := props[PropCategory]; ok {
 		t.Fatal("categoryID 비었는데 카테고리 속성이 포함됨")
+	}
+	if _, ok := props[PropZone]; ok {
+		t.Fatal("zone 비었는데 구역 속성이 포함됨")
 	}
 	if _, ok := props[PropQuantity]; ok {
 		t.Fatal("quantity nil 인데 수량 속성이 포함됨")

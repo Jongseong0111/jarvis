@@ -15,7 +15,7 @@ type NotionPort interface {
 	Locations(ctx context.Context) ([]notion.Location, error)
 	Categories(ctx context.Context) ([]notion.Category, error)
 	SearchItems(ctx context.Context, name string) ([]notion.Item, error)
-	CreateItem(ctx context.Context, name, categoryID, locationID string, quantity *int) (string, error)
+	CreateItem(ctx context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error)
 }
 
 // Home 은 집 정리(home.*) intent 를 처리한다. domain.Worker + domain.ProposalApplier 를 구현한다.
@@ -96,6 +96,7 @@ func (w Home) handleAdd(channelID string, ex Extracted, locations []notion.Locat
 		ItemName:     ex.Item,
 		LocationID:   loc.ID,
 		LocationName: loc.Name,
+		LocationZone: loc.Zone,
 		Quantity:     ex.Quantity,
 	}
 	if cat := findCategory(categories, ex.Category); cat != nil {
@@ -110,7 +111,7 @@ func (w Home) Apply(ctx context.Context, p domain.ChangeProposal) (domain.Reply,
 	if p.ItemName == "" || p.LocationID == "" {
 		return domain.Reply{}, fmt.Errorf("변경안이 불완전함(item/location 누락)")
 	}
-	if _, err := w.notion.CreateItem(ctx, p.ItemName, p.CategoryID, p.LocationID, p.Quantity); err != nil {
+	if _, err := w.notion.CreateItem(ctx, p.ItemName, p.CategoryID, p.LocationID, p.LocationZone, p.Quantity); err != nil {
 		return domain.Reply{}, fmt.Errorf("물건 추가 실패: %w", err)
 	}
 	return domain.Reply{Text: fmt.Sprintf("✅ '%s'을(를) %s에 추가했어.", p.ItemName, p.LocationName)}, nil

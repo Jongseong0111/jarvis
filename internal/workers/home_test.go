@@ -10,8 +10,8 @@ import (
 )
 
 type createdItem struct {
-	name, categoryID, locationID string
-	quantity                     *int
+	name, categoryID, locationID, zone string
+	quantity                           *int
 }
 
 type fakeNotion struct {
@@ -27,11 +27,11 @@ func (f *fakeNotion) Categories(context.Context) ([]notion.Category, error) { re
 func (f *fakeNotion) SearchItems(context.Context, string) ([]notion.Item, error) {
 	return f.items, nil
 }
-func (f *fakeNotion) CreateItem(_ context.Context, name, categoryID, locationID string, quantity *int) (string, error) {
+func (f *fakeNotion) CreateItem(_ context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error) {
 	if f.createErr != nil {
 		return "", f.createErr
 	}
-	f.created = &createdItem{name, categoryID, locationID, quantity}
+	f.created = &createdItem{name, categoryID, locationID, zone, quantity}
 	return "new-id", nil
 }
 
@@ -110,7 +110,7 @@ func TestHome_Add_proposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeProposal: %v", err)
 	}
-	if p.ItemName != "체온계" || p.LocationID != "loc-1" || p.CategoryID != "cat-1" {
+	if p.ItemName != "체온계" || p.LocationID != "loc-1" || p.CategoryID != "cat-1" || p.LocationZone != "거실" {
 		t.Fatalf("변경안 = %+v", p)
 	}
 }
@@ -137,12 +137,12 @@ func TestHome_Apply_createsItem(t *testing.T) {
 	h := NewHome(n, fakeExtractor{})
 	qty := 4
 	reply, err := h.Apply(context.Background(), domain.ChangeProposal{
-		Action: "add", ItemName: "AAA 건전지", CategoryID: "cat-1", LocationID: "loc-1", LocationName: "로그방 서랍", Quantity: &qty,
+		Action: "add", ItemName: "AAA 건전지", CategoryID: "cat-1", LocationID: "loc-1", LocationName: "로그방 서랍", LocationZone: "로그방", Quantity: &qty,
 	})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if n.created == nil || n.created.name != "AAA 건전지" || n.created.locationID != "loc-1" || n.created.categoryID != "cat-1" {
+	if n.created == nil || n.created.name != "AAA 건전지" || n.created.locationID != "loc-1" || n.created.categoryID != "cat-1" || n.created.zone != "로그방" {
 		t.Fatalf("CreateItem 인자 = %+v", n.created)
 	}
 	if n.created.quantity == nil || *n.created.quantity != 4 {
