@@ -68,7 +68,7 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		if f["item_id"] == "" {
 			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(item_id 누락)")
 		}
-		if err := a.port.UpdateItem(ctx, f["item_id"], f["location_id"], f["zone"], parseQty(f["quantity"])); err != nil {
+		if err := a.port.UpdateItem(ctx, f["item_id"], f["category_id"], f["location_id"], f["zone"], parseQty(f["quantity"])); err != nil {
 			return domain.Reply{}, fmt.Errorf("물건 수정 실패: %w", err)
 		}
 		return domain.Reply{Text: fmt.Sprintf("✅ '%s'을(를) 수정했어.", f["item_name"])}, nil

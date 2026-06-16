@@ -389,10 +389,11 @@ func (h homeTools) updateItem() Tool {
 		Write: true,
 		Decl: &genai.FunctionDeclaration{
 			Name:        "update_item",
-			Description: "물건의 위치를 옮기거나 수량을 바꾼다. 수량은 최종 값(절대값)으로 넣는다. 'N개 썼다'면 먼저 search_item 으로 현재 수량을 확인한 뒤 줄어든 값을 넣어라.",
+			Description: "물건의 위치를 옮기거나, 카테고리(대분류)를 지정/변경하거나, 수량을 바꾼다. 수량은 최종 값(절대값). 'N개 썼다'면 먼저 search_item 으로 현재 수량을 확인한 뒤 줄어든 값을 넣어라.",
 			Parameters: objSchema(map[string]*genai.Schema{
 				"name":     strSchema("바꿀 물건 이름"),
 				"location": strSchema("옮길 장소 이름(선택)"),
+				"category": strSchema("지정할 카테고리(대분류) 이름(선택). 예: 청소용품"),
 				"quantity": intSchema("최종 수량(선택)"),
 			}, "name"),
 		},
@@ -417,12 +418,24 @@ func (h homeTools) updateItem() Tool {
 				fields["zone"] = loc.Zone
 				changes = append(changes, "위치 → "+locWithZone(*loc))
 			}
+			if catName := strings.TrimSpace(strArg(args, "category")); catName != "" {
+				cats, err := h.port.Categories(ctx)
+				if err != nil {
+					return domain.ChangeProposal{}, err
+				}
+				cat := findCategory(cats, catName)
+				if cat == nil {
+					return domain.ChangeProposal{}, fmt.Errorf("'%s' 카테고리를 못 찾았어. 등록된 카테고리: %s", catName, strings.Join(categoryNames(cats), ", "))
+				}
+				fields["category_id"] = cat.ID
+				changes = append(changes, "카테고리 → "+cat.Name)
+			}
 			if q := intArg(args, "quantity"); q != nil {
 				fields["quantity"] = strconv.Itoa(*q)
 				changes = append(changes, fmt.Sprintf("수량 → %d", *q))
 			}
 			if len(changes) == 0 {
-				return domain.ChangeProposal{}, fmt.Errorf("뭘 바꿀지 알려줘(위치나 수량)")
+				return domain.ChangeProposal{}, fmt.Errorf("뭘 바꿀지 알려줘(위치/카테고리/수량)")
 			}
 			return domain.ChangeProposal{
 				Op:      "update_item",
@@ -597,6 +610,14 @@ func locationNames(locs []notion.Location) []string {
 	out := make([]string, len(locs))
 	for i, l := range locs {
 		out[i] = l.Name
+	}
+	return out
+}
+
+func categoryNames(cats []notion.Category) []string {
+	out := make([]string, len(cats))
+	for i, c := range cats {
+		out[i] = c.Name
 	}
 	return out
 }

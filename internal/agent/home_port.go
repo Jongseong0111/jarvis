@@ -15,7 +15,7 @@ type HomePort interface {
 	SearchItems(ctx context.Context, name string) ([]notion.Item, error)
 	CreateItem(ctx context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error)
 	CreateLocation(ctx context.Context, name, zone string) (string, error)
-	UpdateItem(ctx context.Context, itemID, locationID, zone string, quantity *int) error
+	UpdateItem(ctx context.Context, itemID, categoryID, locationID, zone string, quantity *int) error
 	ArchiveItem(ctx context.Context, itemID string) error
 	ArchiveLocation(ctx context.Context, locationID string) error
 }
@@ -95,9 +95,9 @@ func (h NotionHome) CreateLocation(ctx context.Context, name, zone string) (stri
 	return h.client.CreatePage(ctx, h.locationsDB, notion.LocationProperties(name, zone))
 }
 
-// UpdateItem 은 물건의 위치/구역/수량을 갱신한다(빈 값은 변경 안 함).
-func (h NotionHome) UpdateItem(ctx context.Context, itemID, locationID, zone string, quantity *int) error {
-	return h.client.UpdatePage(ctx, itemID, notion.ItemUpdateProperties(locationID, zone, quantity))
+// UpdateItem 은 물건의 카테고리/위치/구역/수량을 갱신한다(빈 값은 변경 안 함).
+func (h NotionHome) UpdateItem(ctx context.Context, itemID, categoryID, locationID, zone string, quantity *int) error {
+	return h.client.UpdatePage(ctx, itemID, notion.ItemUpdateProperties(categoryID, locationID, zone, quantity))
 }
 
 // ArchiveItem 은 물건을 삭제(보관)한다.

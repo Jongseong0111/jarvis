@@ -150,8 +150,11 @@ func ItemProperties(name, categoryID, locationID, zone string, quantity *int) ma
 }
 
 // ItemUpdateProperties 는 물건 수정용 부분 properties 맵이다. 빈 값/ nil 은 포함하지 않는다.
-func ItemUpdateProperties(locationID, zone string, quantity *int) map[string]any {
+func ItemUpdateProperties(categoryID, locationID, zone string, quantity *int) map[string]any {
 	props := map[string]any{}
+	if categoryID != "" {
+		props[PropCategory] = relationProp(categoryID)
+	}
 	if locationID != "" {
 		props[PropLocation] = relationProp(locationID)
 	}

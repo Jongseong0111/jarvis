@@ -38,7 +38,11 @@ func (r *MapRenderer) Render(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	blocks := buildMapBlocks(items, locs)
+	cats, err := r.home.Categories(ctx)
+	if err != nil {
+		return err
+	}
+	blocks := buildMapBlocks(items, locs, cats)
 
 	ids, err := r.sink.BlockChildren(ctx, r.pageID)
 	if err != nil {
@@ -60,33 +64,40 @@ var zoneEmoji = map[string]string{
 	"로그방": "💻", "베란다": "🌿", "창고": "📦", "욕실": "🚿", "기타": "📍",
 }
 
-// buildMapBlocks 는 물건/장소로 지도 블록을 만든다. (순수 함수)
-func buildMapBlocks(items []notion.Item, locs []notion.Location) []any {
-	byID := indexLocations(locs)
+// catEmoji 는 카테고리 이름별 아이콘이다(없으면 빈 문자열).
+var catEmoji = map[string]string{
+	"화장품": "💄", "생활용품": "🧴", "청소용품": "🧹", "세탁용품": "🧺", "주방용품": "🍴",
+	"서류": "📄", "문서": "📄", "의약품": "💊", "아기상비약": "💊", "성인상비약": "💊",
+	"전자기기": "🔌", "충전기": "🔌", "케이블": "🔌", "배터리": "🔋",
+	"공구": "🛠️", "의류": "👕", "육아용품": "🧸", "아기용품": "🧸", "아기위생": "🧼",
+}
 
-	// zone -> locName -> []표시이름
-	zones := map[string]map[string][]string{}
+// buildMapBlocks 는 물건/장소/카테고리로 지도 블록을 만든다(장소→카테고리→물건). (순수 함수)
+func buildMapBlocks(items []notion.Item, locs []notion.Location, cats []notion.Category) []any {
+	locByID := indexLocations(locs)
+	catByID := map[string]string{}
+	for _, c := range cats {
+		catByID[c.ID] = c.Name
+	}
+
+	// zone -> locName -> catName -> []표시이름
+	zones := map[string]map[string]map[string][]string{}
 	for _, it := range items {
-		loc := byID[it.LocationID]
-		zone := it.Zone
-		if zone == "" {
-			zone = loc.Zone
-		}
-		if zone == "" {
-			zone = "기타"
-		}
-		locName := loc.Name
-		if locName == "" {
-			locName = "(위치 미상)"
-		}
+		loc := locByID[it.LocationID]
+		zone := firstNonEmpty(it.Zone, loc.Zone, "기타")
+		locName := firstNonEmpty(loc.Name, "(위치 미상)")
+		catName := firstNonEmpty(catByID[it.CategoryID], "기타")
 		name := it.Name
 		if it.Quantity != nil {
 			name = fmt.Sprintf("%s(%d)", name, *it.Quantity)
 		}
 		if zones[zone] == nil {
-			zones[zone] = map[string][]string{}
+			zones[zone] = map[string]map[string][]string{}
 		}
-		zones[zone][locName] = append(zones[zone][locName], name)
+		if zones[zone][locName] == nil {
+			zones[zone][locName] = map[string][]string{}
+		}
+		zones[zone][locName][catName] = append(zones[zone][locName][catName], name)
 	}
 
 	blocks := []any{calloutBlock("✨", "자비스가 자동으로 그려요. 직접 고치지 말고 @jarvis 한테 말하세요.", "gray_background")}
@@ -95,22 +106,65 @@ func buildMapBlocks(items []notion.Item, locs []notion.Location) []any {
 		return blocks
 	}
 
-	for zi, zone := range orderedZones(zones) {
-		emoji := zoneEmoji[zone]
-		if emoji == "" {
-			emoji = "📍"
-		}
+	for zi, zone := range orderedZones(mapKeys(zones)) {
+		emoji := firstNonEmpty(zoneEmoji[zone], "📍")
 		if zi > 0 {
 			blocks = append(blocks, dividerBlock())
 		}
 		blocks = append(blocks, headingBlock(emoji+" "+zone))
 		color := zonePalette[zi%len(zonePalette)]
-		locsInZone := zones[zone]
-		for _, locName := range sortedKeys(locsInZone) {
-			blocks = append(blocks, locationCallout(locName, strings.Join(locsInZone[locName], " · "), color))
+		for _, locName := range sortedStrings(mapKeys(zones[zone])) {
+			children := []any{}
+			for _, catName := range categoryOrder(mapKeys(zones[zone][locName])) {
+				itemsStr := strings.Join(zones[zone][locName][catName], " · ")
+				var line string
+				if catName == "기타" {
+					line = itemsStr
+				} else {
+					line = firstNonEmpty(catEmoji[catName]+" ", "") + catName + " — " + itemsStr
+				}
+				children = append(children, bulletBlock(line))
+			}
+			blocks = append(blocks, locationCallout(locName, color, children))
 		}
 	}
 	return blocks
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func mapKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func sortedStrings(s []string) []string {
+	sort.Strings(s)
+	return s
+}
+
+// categoryOrder 는 카테고리를 가나다순 정렬하되 "기타"를 맨 뒤로 둔다.
+func categoryOrder(keys []string) []string {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i] == "기타" {
+			return false
+		}
+		if keys[j] == "기타" {
+			return true
+		}
+		return keys[i] < keys[j]
+	})
+	return keys
 }
 
 // zonePalette 는 구역별로 돌아가며 쓰는 콜아웃 배경색이다.
@@ -120,14 +174,10 @@ var zonePalette = []string{
 }
 
 // orderedZones 는 zoneOrder 우선, 나머지는 가나다순, "기타"는 맨 뒤로 정렬한다.
-func orderedZones(zones map[string]map[string][]string) []string {
+func orderedZones(out []string) []string {
 	rank := map[string]int{}
 	for i, z := range zoneOrder {
 		rank[z] = i
-	}
-	var out []string
-	for z := range zones {
-		out = append(out, z)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -150,15 +200,6 @@ func orderedZones(zones map[string]map[string][]string) []string {
 			return a < b
 		}
 	})
-	return out
-}
-
-func sortedKeys(m map[string][]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }
 
@@ -189,19 +230,26 @@ func calloutBlock(emoji, text, color string) any {
 	}
 }
 
-// locationCallout 은 "📦 **장소**  item1 · item2" 카드형 콜아웃을 만든다.
-func locationCallout(loc, items, color string) any {
+// locationCallout 은 "📦 **장소**" 카드 안에 카테고리별 항목(children)을 담은 콜아웃을 만든다.
+func locationCallout(loc, color string, children []any) any {
 	rt := []any{
-		map[string]any{"type": "text", "text": map[string]any{"content": loc + "  "}, "annotations": map[string]any{"bold": true}},
-		map[string]any{"type": "text", "text": map[string]any{"content": items}},
+		map[string]any{"type": "text", "text": map[string]any{"content": loc}, "annotations": map[string]any{"bold": true}},
 	}
+	callout := map[string]any{
+		"icon":      map[string]any{"type": "emoji", "emoji": "📦"},
+		"rich_text": rt,
+		"color":     color,
+	}
+	if len(children) > 0 {
+		callout["children"] = children
+	}
+	return map[string]any{"object": "block", "type": "callout", "callout": callout}
+}
+
+func bulletBlock(text string) any {
 	return map[string]any{
-		"object": "block", "type": "callout",
-		"callout": map[string]any{
-			"icon":      map[string]any{"type": "emoji", "emoji": "📦"},
-			"rich_text": rt,
-			"color":     color,
-		},
+		"object": "block", "type": "bulleted_list_item",
+		"bulleted_list_item": map[string]any{"rich_text": richText(text, false)},
 	}
 }
 
