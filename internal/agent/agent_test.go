@@ -72,6 +72,9 @@ func (f *fakeHomePort) ArchiveItem(_ context.Context, itemID string) error {
 	return nil
 }
 func (f *fakeHomePort) ArchiveLocation(_ context.Context, _ string) error { return nil }
+func (f *fakeHomePort) EnsureCategory(_ context.Context, name string) (string, error) {
+	return "cat-" + name, nil
+}
 
 func newAgent(gen generator, port HomePort) Agent {
 	return New(gen, HomeTools(port, "", ""), "")

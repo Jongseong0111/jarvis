@@ -167,6 +167,11 @@ func ItemUpdateProperties(categoryID, locationID, zone string, quantity *int) ma
 	return props
 }
 
+// CategoryProperties 는 Categories DB page 생성을 위한 properties 맵을 만든다.
+func CategoryProperties(name string) map[string]any {
+	return map[string]any{PropName: titleProp(name)}
+}
+
 // LocationProperties 는 Locations DB page 생성을 위한 properties 맵을 만든다.
 // zone(구역 select)이 비면 넣지 않는다. 타입은 Storage 로 기본 지정한다(자리=수납).
 func LocationProperties(name, zone string) map[string]any {
