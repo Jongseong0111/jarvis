@@ -44,9 +44,11 @@ func (c *Client) GenerateWithTools(ctx context.Context, contents []*genai.Conten
 	}
 
 	temp := float32(0)
+	thinkBudget := int32(0) // thinking 비활성(함수호출 시 빈 응답 방지 + 속도)
 	cfg := &genai.GenerateContentConfig{
-		Temperature: &temp,
-		Tools:       tools,
+		Temperature:    &temp,
+		Tools:          tools,
+		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: &thinkBudget},
 	}
 	if systemPrompt != "" {
 		cfg.SystemInstruction = &genai.Content{Parts: []*genai.Part{{Text: systemPrompt}}}
