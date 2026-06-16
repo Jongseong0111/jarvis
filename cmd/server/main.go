@@ -36,7 +36,7 @@ func main() {
 		notion.New(cfg.NotionAPIKey),
 		cfg.NotionLocationsDBID, cfg.NotionCategoriesDBID, cfg.NotionItemsDBID,
 	)
-	ag := agent.New(geminiClient, agent.HomeTools(home), "")
+	ag := agent.New(geminiClient, agent.HomeTools(home, cfg.NotionHomeURL), "")
 	handler := slack.NewHandler(ag, client)
 
 	// 버튼 승인 처리(변경안 적용). applier=HomeApplier, sender=client

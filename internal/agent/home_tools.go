@@ -17,10 +17,10 @@ type homeTools struct {
 	port HomePort
 }
 
-// HomeTools 는 집정리 도구 목록을 만든다.
-func HomeTools(port HomePort) []Tool {
+// HomeTools 는 집정리 도구 목록을 만든다. homeURL 이 있으면 노션 링크 도구도 포함한다.
+func HomeTools(port HomePort, homeURL string) []Tool {
 	h := homeTools{port: port}
-	return []Tool{
+	tools := []Tool{
 		h.listZones(),
 		h.listLocations(),
 		h.listItems(),
@@ -28,6 +28,24 @@ func HomeTools(port HomePort) []Tool {
 		h.listCategories(),
 		h.addLocation(),
 		h.addItem(),
+	}
+	if homeURL != "" {
+		tools = append(tools, linkTool(homeURL))
+	}
+	return tools
+}
+
+// linkTool 은 집 정리 노션 페이지 링크를 보여주는 읽기 도구다.
+func linkTool(url string) Tool {
+	return Tool{
+		Decl: &genai.FunctionDeclaration{
+			Name:        "show_notion",
+			Description: "집 정리 노션 페이지 링크를 보여준다. 사용자가 노션 페이지를 보고 싶어하거나 링크를 달라고 할 때 사용.",
+			Parameters:  objSchema(map[string]*genai.Schema{}),
+		},
+		Run: func(_ context.Context, _ map[string]any) (string, error) {
+			return "집 정리 노션 페이지: " + url, nil
+		},
 	}
 }
 

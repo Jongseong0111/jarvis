@@ -20,6 +20,7 @@ type Config struct {
 	NotionLocationsDBID  string
 	NotionCategoriesDBID string
 	NotionItemsDBID      string
+	NotionHomeURL        string // 집 정리 페이지 링크(선택, 사용자에게 보여줄 용도)
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -37,6 +38,7 @@ func New() (Config, error) {
 		NotionLocationsDBID:  os.Getenv("NOTION_LOCATIONS_DB_ID"),
 		NotionCategoriesDBID: os.Getenv("NOTION_CATEGORIES_DB_ID"),
 		NotionItemsDBID:      os.Getenv("NOTION_ITEMS_DB_ID"),
+		NotionHomeURL:        os.Getenv("NOTION_HOME_URL"),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
