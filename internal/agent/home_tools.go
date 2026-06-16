@@ -17,8 +17,8 @@ type homeTools struct {
 	port HomePort
 }
 
-// HomeTools 는 집정리 도구 목록을 만든다. homeURL 이 있으면 노션 링크 도구도 포함한다.
-func HomeTools(port HomePort, homeURL string) []Tool {
+// HomeTools 는 집정리 도구 목록을 만든다. URL 이 있으면 노션 링크 도구도 포함한다.
+func HomeTools(port HomePort, homeURL, mapURL string) []Tool {
 	h := homeTools{port: port}
 	tools := []Tool{
 		h.listZones(),
@@ -33,22 +33,29 @@ func HomeTools(port HomePort, homeURL string) []Tool {
 		h.deleteItem(),
 		h.deleteLocation(),
 	}
-	if homeURL != "" {
-		tools = append(tools, linkTool(homeURL))
+	if homeURL != "" || mapURL != "" {
+		tools = append(tools, linkTool(homeURL, mapURL))
 	}
 	return tools
 }
 
-// linkTool 은 집 정리 노션 페이지 링크를 보여주는 읽기 도구다.
-func linkTool(url string) Tool {
+// linkTool 은 노션 페이지 링크(지도/관리)를 보여주는 읽기 도구다.
+func linkTool(homeURL, mapURL string) Tool {
 	return Tool{
 		Decl: &genai.FunctionDeclaration{
 			Name:        "show_notion",
-			Description: "집 정리 노션 페이지 링크를 보여준다. 사용자가 노션 페이지를 보고 싶어하거나 링크를 달라고 할 때 사용.",
+			Description: "노션 페이지 링크를 보여준다. 사용자가 '집 보여줘', '노션 링크', '지도' 등을 원할 때 사용.",
 			Parameters:  objSchema(map[string]*genai.Schema{}),
 		},
 		Run: func(_ context.Context, _ map[string]any) (string, error) {
-			return "집 정리 노션 페이지: " + url, nil
+			var lines []string
+			if mapURL != "" {
+				lines = append(lines, "🏠 우리집 지도: "+mapURL)
+			}
+			if homeURL != "" {
+				lines = append(lines, "🗂️ 관리(DB): "+homeURL)
+			}
+			return strings.Join(lines, "\n"), nil
 		},
 	}
 }

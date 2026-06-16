@@ -32,15 +32,25 @@ func main() {
 
 	// 도구를 가진 LLM 에이전트(자연 대화 + 집정리 도구)
 	geminiClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel)
+	notionClient := notion.New(cfg.NotionAPIKey)
 	home := agent.NewNotionHome(
-		notion.New(cfg.NotionAPIKey),
+		notionClient,
 		cfg.NotionLocationsDBID, cfg.NotionCategoriesDBID, cfg.NotionItemsDBID,
 	)
-	ag := agent.New(geminiClient, agent.HomeTools(home, cfg.NotionHomeURL), "")
+
+	// 우리집 지도 자동 렌더러(맵 페이지가 설정된 경우)
+	mapURL := ""
+	var renderer *agent.MapRenderer
+	if cfg.NotionMapPageID != "" {
+		renderer = agent.NewMapRenderer(notionClient, cfg.NotionMapPageID, home)
+		mapURL = "https://www.notion.so/" + cfg.NotionMapPageID
+	}
+
+	ag := agent.New(geminiClient, agent.HomeTools(home, cfg.NotionHomeURL, mapURL), "")
 	handler := slack.NewHandler(ag, client)
 
-	// 버튼 승인 처리(변경안 적용). applier=HomeApplier, sender=client
-	client.SetInteractionHandler(slack.NewInteractionHandler(agent.NewHomeApplier(home), client))
+	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=HomeApplier, sender=client
+	client.SetInteractionHandler(slack.NewInteractionHandler(agent.NewHomeApplier(home, renderer), client))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

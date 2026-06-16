@@ -6,20 +6,36 @@ import (
 	"strconv"
 
 	"github.com/Jongseong0111/jarvis/domain"
+	"github.com/Jongseong0111/jarvis/pkg/log"
 )
 
 // HomeApplier 는 승인된 집정리 변경안을 Notion 에 반영한다. domain.ProposalApplier 구현.
 type HomeApplier struct {
-	port HomePort
+	port     HomePort
+	renderer *MapRenderer // 쓰기 후 지도 갱신(선택, nil 가능)
 }
 
-// NewHomeApplier 는 HomeApplier 를 생성한다.
-func NewHomeApplier(port HomePort) HomeApplier {
-	return HomeApplier{port: port}
+// NewHomeApplier 는 HomeApplier 를 생성한다. renderer 가 있으면 쓰기 후 지도를 다시 그린다.
+func NewHomeApplier(port HomePort, renderer *MapRenderer) HomeApplier {
+	return HomeApplier{port: port, renderer: renderer}
 }
 
-// Apply 는 변경안 Op 에 따라 Notion 쓰기를 수행한다. ChannelID 는 호출자가 채운다.
+// Apply 는 변경안을 반영하고, 성공 시 지도 페이지를 다시 그린다(best-effort).
 func (a HomeApplier) Apply(ctx context.Context, p domain.ChangeProposal) (domain.Reply, error) {
+	reply, err := a.apply(ctx, p)
+	if err != nil {
+		return domain.Reply{}, err
+	}
+	if a.renderer != nil {
+		if rerr := a.renderer.Render(ctx); rerr != nil {
+			log.FromContext(ctx).Error("지도 갱신 실패", "error", rerr)
+		}
+	}
+	return reply, nil
+}
+
+// apply 는 변경안 Op 에 따라 Notion 쓰기를 수행한다.
+func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain.Reply, error) {
 	f := p.Fields
 	switch p.Op {
 	case "add_item":
