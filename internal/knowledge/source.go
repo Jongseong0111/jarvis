@@ -9,21 +9,32 @@ import (
 )
 
 // WriteSource 는 요약을 sources/conversation/<today>-<slug>.md 로 저장한다(미커밋).
-// url 이 비면 frontmatter 에서 생략한다. 같은 경로가 있으면 -2,-3 접미를 붙인다.
+// url 이 비면 frontmatter 에서 생략한다.
+// 같은 url 의 소스가 이미 있으면 그 파일을 갱신(덮어쓰기)한다 — 같은 대화를 다시 저장(수정)하는 경우.
+// 그 외 같은 경로가 있으면 -2,-3 접미를 붙여 새 파일을 만든다(다른 대화·같은 제목).
 func WriteSource(repoPath, today, title, url, content string) (string, error) {
 	dir := filepath.Join(repoPath, "sources", "conversation")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("디렉터리 생성 실패: %w", err)
 	}
 
-	slug := slugify(title)
-	if slug == "" {
-		slug = "untitled"
+	// 같은 url 의 기존 소스가 있으면 그 경로를 재사용(갱신).
+	path := ""
+	if url != "" {
+		if existing, ok := findSourceByURL(dir, url); ok {
+			path = existing
+		}
 	}
-	base := today + "-" + slug
-	path := filepath.Join(dir, base+".md")
-	for i := 2; fileExists(path); i++ {
-		path = filepath.Join(dir, fmt.Sprintf("%s-%d.md", base, i))
+	if path == "" {
+		slug := slugify(title)
+		if slug == "" {
+			slug = "untitled"
+		}
+		base := today + "-" + slug
+		path = filepath.Join(dir, base+".md")
+		for i := 2; fileExists(path); i++ {
+			path = filepath.Join(dir, fmt.Sprintf("%s-%d.md", base, i))
+		}
 	}
 
 	var b strings.Builder
@@ -64,6 +75,31 @@ func slugify(s string) string {
 		out = strings.Trim(string(r[:60]), "-")
 	}
 	return out
+}
+
+// findSourceByURL 은 dir 안에서 frontmatter 의 `url:` 이 url 과 일치하는 첫 .md 파일을 찾는다.
+func findSourceByURL(dir, url string) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	want := "url: " + url
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.TrimRight(line, "\r") == want {
+				return p, true
+			}
+		}
+	}
+	return "", false
 }
 
 func fileExists(p string) bool {
