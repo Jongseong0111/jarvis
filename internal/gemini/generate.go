@@ -1,0 +1,43 @@
+package gemini
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"google.golang.org/genai"
+)
+
+// GenerateText 는 도구 없이 일반 텍스트를 생성한다(요약 등).
+func (c *Client) GenerateText(ctx context.Context, system, user string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  c.apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return "", fmt.Errorf("gemini 클라이언트 생성 실패: %w", err)
+	}
+
+	temp := float32(0)
+	thinkBudget := int32(0)
+	cfg := &genai.GenerateContentConfig{
+		Temperature:    &temp,
+		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: &thinkBudget},
+	}
+	if system != "" {
+		cfg.SystemInstruction = &genai.Content{Parts: []*genai.Part{{Text: system}}}
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text(user), cfg)
+	if err != nil {
+		return "", fmt.Errorf("gemini 생성 실패: %w", err)
+	}
+	out := strings.TrimSpace(resp.Text())
+	if out == "" {
+		return "", fmt.Errorf("gemini 빈 응답")
+	}
+	return out, nil
+}
