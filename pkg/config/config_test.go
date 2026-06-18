@@ -2,8 +2,22 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
+
+// setRequiredEnv 은 모든 필수 환경변수를 설정한다.
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	env := map[string]string{
+		"SLACK_BOT_TOKEN": "x", "SLACK_APP_TOKEN": "x", "GEMINI_API_KEY": "x",
+		"NOTION_API_KEY": "x", "NOTION_LOCATIONS_DB_ID": "x",
+		"NOTION_CATEGORIES_DB_ID": "x", "NOTION_ITEMS_DB_ID": "x",
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+}
 
 // full 은 모든 필수 값이 채워진 Config 를 반환한다.
 func full() Config {
@@ -48,17 +62,8 @@ func TestConfig_validate(t *testing.T) {
 }
 
 func TestNew_visionModelDefault(t *testing.T) {
-	// 필수 env 채우고 VISION 모델은 비워 기본값 확인
-	env := map[string]string{
-		"SLACK_BOT_TOKEN": "x", "SLACK_APP_TOKEN": "x", "GEMINI_API_KEY": "x",
-		"NOTION_API_KEY": "x", "NOTION_LOCATIONS_DB_ID": "x",
-		"NOTION_CATEGORIES_DB_ID": "x", "NOTION_ITEMS_DB_ID": "x",
-	}
-	for k, v := range env {
-		t.Setenv(k, v)
-	}
+	setRequiredEnv(t)
 	os.Unsetenv("GEMINI_VISION_MODEL")
-
 	cfg, err := New()
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -69,20 +74,40 @@ func TestNew_visionModelDefault(t *testing.T) {
 }
 
 func TestNew_visionModelOverride(t *testing.T) {
-	env := map[string]string{
-		"SLACK_BOT_TOKEN": "x", "SLACK_APP_TOKEN": "x", "GEMINI_API_KEY": "x",
-		"NOTION_API_KEY": "x", "NOTION_LOCATIONS_DB_ID": "x",
-		"NOTION_CATEGORIES_DB_ID": "x", "NOTION_ITEMS_DB_ID": "x",
-		"GEMINI_VISION_MODEL": "gemini-3.1-flash-lite",
-	}
-	for k, v := range env {
-		t.Setenv(k, v)
-	}
+	setRequiredEnv(t)
+	t.Setenv("GEMINI_VISION_MODEL", "gemini-3.1-flash-lite")
 	cfg, err := New()
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	if cfg.GeminiVisionModel != "gemini-3.1-flash-lite" {
 		t.Fatalf("오버라이드 = %q", cfg.GeminiVisionModel)
+	}
+}
+
+func TestNew_knowledgeRepoPathDefault(t *testing.T) {
+	setRequiredEnv(t)
+	os.Unsetenv("KNOWLEDGE_REPO_PATH")
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, "personal-agent", "knowledge-base")
+	if cfg.KnowledgeRepoPath != want {
+		t.Fatalf("기본 경로 = %q, want %q", cfg.KnowledgeRepoPath, want)
+	}
+}
+
+func TestNew_knowledgeRepoPathOverrideExpandsTilde(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("KNOWLEDGE_REPO_PATH", "~/kb")
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	if cfg.KnowledgeRepoPath != filepath.Join(home, "kb") {
+		t.Fatalf("~ 확장 실패: %q", cfg.KnowledgeRepoPath)
 	}
 }
