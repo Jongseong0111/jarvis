@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // full 은 모든 필수 값이 채워진 Config 를 반환한다.
 func full() Config {
@@ -41,5 +44,45 @@ func TestConfig_validate(t *testing.T) {
 				t.Fatalf("validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestNew_visionModelDefault(t *testing.T) {
+	// 필수 env 채우고 VISION 모델은 비워 기본값 확인
+	env := map[string]string{
+		"SLACK_BOT_TOKEN": "x", "SLACK_APP_TOKEN": "x", "GEMINI_API_KEY": "x",
+		"NOTION_API_KEY": "x", "NOTION_LOCATIONS_DB_ID": "x",
+		"NOTION_CATEGORIES_DB_ID": "x", "NOTION_ITEMS_DB_ID": "x",
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+	os.Unsetenv("GEMINI_VISION_MODEL")
+
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cfg.GeminiVisionModel != "gemini-2.5-flash-lite" {
+		t.Fatalf("기본 비전 모델 = %q, want gemini-2.5-flash-lite", cfg.GeminiVisionModel)
+	}
+}
+
+func TestNew_visionModelOverride(t *testing.T) {
+	env := map[string]string{
+		"SLACK_BOT_TOKEN": "x", "SLACK_APP_TOKEN": "x", "GEMINI_API_KEY": "x",
+		"NOTION_API_KEY": "x", "NOTION_LOCATIONS_DB_ID": "x",
+		"NOTION_CATEGORIES_DB_ID": "x", "NOTION_ITEMS_DB_ID": "x",
+		"GEMINI_VISION_MODEL": "gemini-3.1-flash-lite",
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cfg.GeminiVisionModel != "gemini-3.1-flash-lite" {
+		t.Fatalf("오버라이드 = %q", cfg.GeminiVisionModel)
 	}
 }

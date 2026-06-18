@@ -15,6 +15,7 @@ type Config struct {
 	SlackAppToken string
 	GeminiAPIKey  string
 	GeminiModel   string
+	GeminiVisionModel string
 
 	NotionAPIKey         string
 	NotionLocationsDBID  string
@@ -33,7 +34,8 @@ func New() (Config, error) {
 		SlackBotToken: os.Getenv("SLACK_BOT_TOKEN"),
 		SlackAppToken: os.Getenv("SLACK_APP_TOKEN"),
 		GeminiAPIKey:  os.Getenv("GEMINI_API_KEY"),
-		GeminiModel:   getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+		GeminiModel:   getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+		GeminiVisionModel: getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite"),
 
 		NotionAPIKey:         os.Getenv("NOTION_API_KEY"),
 		NotionLocationsDBID:  os.Getenv("NOTION_LOCATIONS_DB_ID"),
