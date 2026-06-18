@@ -10,11 +10,11 @@ import (
 
 // Config 는 jarvis 실행에 필요한 설정값이다.
 type Config struct {
-	Env           string
-	SlackBotToken string
-	SlackAppToken string
-	GeminiAPIKey  string
-	GeminiModel   string
+	Env               string
+	SlackBotToken     string
+	SlackAppToken     string
+	GeminiAPIKey      string
+	GeminiModel       string
 	GeminiVisionModel string
 
 	NotionAPIKey         string
@@ -30,11 +30,11 @@ func New() (Config, error) {
 	_ = godotenv.Load("config/.env") // 파일 없으면 무시 (환경변수만으로도 동작)
 
 	cfg := Config{
-		Env:           getenv("JARVIS_ENV", "local"),
-		SlackBotToken: os.Getenv("SLACK_BOT_TOKEN"),
-		SlackAppToken: os.Getenv("SLACK_APP_TOKEN"),
-		GeminiAPIKey:  os.Getenv("GEMINI_API_KEY"),
-		GeminiModel:   getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+		Env:               getenv("JARVIS_ENV", "local"),
+		SlackBotToken:     os.Getenv("SLACK_BOT_TOKEN"),
+		SlackAppToken:     os.Getenv("SLACK_APP_TOKEN"),
+		GeminiAPIKey:      os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:       getenv("GEMINI_MODEL", "gemini-2.5-flash"),
 		GeminiVisionModel: getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite"),
 
 		NotionAPIKey:         os.Getenv("NOTION_API_KEY"),
