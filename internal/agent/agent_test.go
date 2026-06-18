@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,16 +12,20 @@ import (
 	"github.com/Jongseong0111/jarvis/internal/notion"
 )
 
+var errInjected = errors.New("injected")
+
 // --- fakes ---
 
 type fakeGen struct {
-	responses []*genai.GenerateContentResponse
-	i         int
-	calls     int
+	responses    []*genai.GenerateContentResponse
+	i            int
+	calls        int
+	lastContents []*genai.Content
 }
 
-func (f *fakeGen) GenerateWithTools(_ context.Context, _ []*genai.Content, _ []*genai.Tool, _ string) (*genai.GenerateContentResponse, error) {
+func (f *fakeGen) GenerateWithTools(_ context.Context, contents []*genai.Content, _ []*genai.Tool, _ string) (*genai.GenerateContentResponse, error) {
 	f.calls++
+	f.lastContents = contents
 	r := f.responses[f.i%len(f.responses)]
 	f.i++
 	return r, nil
@@ -77,7 +82,7 @@ func (f *fakeHomePort) EnsureCategory(_ context.Context, name string) (string, e
 }
 
 func newAgent(gen generator, port HomePort) Agent {
-	return New(gen, HomeTools(port, "", ""), "")
+	return New(gen, nil, HomeTools(port, "", ""), "")
 }
 
 // --- tests ---
@@ -237,5 +242,79 @@ func TestHomeApplier_addLocation(t *testing.T) {
 	}
 	if !strings.Contains(reply.Text, "추가했어") {
 		t.Fatalf("확인 응답 = %q", reply.Text)
+	}
+}
+
+// --- vision fakes & tests ---
+
+type fakeVision struct {
+	names []string
+	err   error
+	calls int
+}
+
+func (f *fakeVision) ExtractItems(_ context.Context, _ []domain.Image) ([]string, error) {
+	f.calls++
+	return f.names, f.err
+}
+
+func TestAgent_vision_augmentsText(t *testing.T) {
+	t.Parallel()
+	gen := &fakeGen{responses: []*genai.GenerateContentResponse{textResp("등록할게")}}
+	vis := &fakeVision{names: []string{"정리함", "휴지"}}
+	a := New(gen, vis, HomeTools(&fakeHomePort{}, "", ""), "")
+
+	_, err := a.Route(context.Background(), domain.IncomingMessage{
+		ChannelID: "C1", Text: "안방 수납장1에 넣었어",
+		Images: []domain.Image{{Data: []byte("x"), MIME: "image/jpeg"}},
+	})
+	if err != nil {
+		t.Fatalf("Route: %v", err)
+	}
+	if vis.calls != 1 {
+		t.Fatalf("vision 호출 수 = %d, want 1", vis.calls)
+	}
+	last := gen.lastContents[len(gen.lastContents)-1]
+	if !strings.Contains(last.Parts[0].Text, "정리함") || !strings.Contains(last.Parts[0].Text, "안방 수납장1") {
+		t.Fatalf("증강 텍스트 = %q", last.Parts[0].Text)
+	}
+}
+
+func TestAgent_vision_emptyNoText_asksBack(t *testing.T) {
+	t.Parallel()
+	gen := &fakeGen{responses: []*genai.GenerateContentResponse{textResp("안 불려야 함")}}
+	vis := &fakeVision{names: []string{}}
+	a := New(gen, vis, HomeTools(&fakeHomePort{}, "", ""), "")
+
+	reply, err := a.Route(context.Background(), domain.IncomingMessage{
+		ChannelID: "C1", Text: "",
+		Images: []domain.Image{{Data: []byte("x"), MIME: "image/jpeg"}},
+	})
+	if err != nil {
+		t.Fatalf("Route: %v", err)
+	}
+	if gen.calls != 0 {
+		t.Fatalf("빈 인식+무텍스트면 에이전트 루프 안 돌아야 함: calls=%d", gen.calls)
+	}
+	if !strings.Contains(reply.Text, "못 찾") {
+		t.Fatalf("되묻기 응답 = %q", reply.Text)
+	}
+}
+
+func TestAgent_vision_errorFallsBackToText(t *testing.T) {
+	t.Parallel()
+	gen := &fakeGen{responses: []*genai.GenerateContentResponse{textResp("그냥 답")}}
+	vis := &fakeVision{err: errInjected}
+	a := New(gen, vis, HomeTools(&fakeHomePort{}, "", ""), "")
+
+	reply, err := a.Route(context.Background(), domain.IncomingMessage{
+		ChannelID: "C1", Text: "안녕",
+		Images: []domain.Image{{Data: []byte("x"), MIME: "image/jpeg"}},
+	})
+	if err != nil {
+		t.Fatalf("Route: %v", err)
+	}
+	if gen.calls != 1 || reply.Text != "그냥 답" {
+		t.Fatalf("비전 실패 시 텍스트로 진행해야 함: calls=%d reply=%q", gen.calls, reply.Text)
 	}
 }

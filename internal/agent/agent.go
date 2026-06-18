@@ -8,6 +8,7 @@ import (
 	"google.golang.org/genai"
 
 	"github.com/Jongseong0111/jarvis/domain"
+	"github.com/Jongseong0111/jarvis/pkg/log"
 )
 
 const maxTurns = 6
@@ -29,25 +30,45 @@ type generator interface {
 	GenerateWithTools(ctx context.Context, contents []*genai.Content, tools []*genai.Tool, system string) (*genai.GenerateContentResponse, error)
 }
 
+// VisionExtractor 는 이미지에서 물건 이름 목록을 뽑는 능력이다(테스트에서 fake 주입).
+type VisionExtractor interface {
+	ExtractItems(ctx context.Context, images []domain.Image) ([]string, error)
+}
+
 // Agent 는 도구를 가진 LLM 에이전트다. domain.MessageRouter 를 구현한다.
 type Agent struct {
 	gen    generator
+	vision VisionExtractor
 	tools  map[string]Tool
 	decls  []*genai.Tool
 	system string
 	mem    *memory
 }
 
-// New 는 Agent 를 생성한다.
-func New(gen generator, tools []Tool, system string) Agent {
+// New 는 Agent 를 생성한다. vision 은 nil 가능(이미지 입력 미사용 시).
+func New(gen generator, vision VisionExtractor, tools []Tool, system string) Agent {
 	if system == "" {
 		system = DefaultSystemPrompt
 	}
-	return Agent{gen: gen, tools: toolMap(tools), decls: toolDecls(tools), system: system, mem: newMemory()}
+	return Agent{gen: gen, vision: vision, tools: toolMap(tools), decls: toolDecls(tools), system: system, mem: newMemory()}
 }
 
 // Route 는 메시지를 에이전트 루프로 처리한다(잡담→텍스트, 작업→도구/변경안).
 func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Reply, error) {
+	if len(in.Images) > 0 && a.vision != nil {
+		names, err := a.vision.ExtractItems(ctx, in.Images)
+		switch {
+		case err != nil:
+			log.FromContext(ctx).Error("비전 추출 실패", "error", err) // best-effort: 텍스트로 진행
+		case len(names) == 0:
+			if strings.TrimSpace(in.Text) == "" {
+				return domain.Reply{ChannelID: in.ChannelID, Text: "사진에서 물건을 못 찾았어. 뭐가 있는지 말로 알려줄래?"}, nil
+			}
+		default:
+			in.Text = "[사진에서 인식한 물건: " + strings.Join(names, ", ") + "] " + in.Text
+		}
+	}
+
 	contents := append(a.mem.get(in.ChannelID), genai.Text(in.Text)...)
 	lastResult := "" // 마지막 읽기 도구 결과(모델이 빈 응답일 때 fallback)
 
