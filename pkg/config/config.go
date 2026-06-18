@@ -4,6 +4,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -16,6 +18,7 @@ type Config struct {
 	GeminiAPIKey      string
 	GeminiModel       string
 	GeminiVisionModel string
+	KnowledgeRepoPath string
 
 	NotionAPIKey         string
 	NotionLocationsDBID  string
@@ -36,6 +39,7 @@ func New() (Config, error) {
 		GeminiAPIKey:      os.Getenv("GEMINI_API_KEY"),
 		GeminiModel:       getenv("GEMINI_MODEL", "gemini-2.5-flash"),
 		GeminiVisionModel: getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite"),
+		KnowledgeRepoPath: expandHome(getenv("KNOWLEDGE_REPO_PATH", "~/personal-agent/knowledge-base")),
 
 		NotionAPIKey:         os.Getenv("NOTION_API_KEY"),
 		NotionLocationsDBID:  os.Getenv("NOTION_LOCATIONS_DB_ID"),
@@ -74,4 +78,14 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// expandHome 은 "~/" 접두를 사용자 홈 디렉터리로 치환한다.
+func expandHome(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
