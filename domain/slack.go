@@ -8,6 +8,13 @@ type IncomingMessage struct {
 	ChannelID string
 	UserID    string
 	Text      string
+	Images    []Image // 첨부 이미지(없으면 nil)
+}
+
+// Image 는 첨부 이미지의 원본 바이트와 MIME 타입이다.
+type Image struct {
+	Data []byte
+	MIME string
 }
 
 // Reply 는 채널로 보낼 응답이다.
