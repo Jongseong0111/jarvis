@@ -22,9 +22,9 @@ ChatGPT 공유링크 → 슬랙 @jarvis + 링크
 
 **In (Phase A):**
 - 슬랙 메시지에서 `chatgpt.com/share/...` 링크를 받아 대화를 추출.
-- 대화를 Gemini로 깔끔히 요약(한국어, 정해진 양식).
-- 요약을 kb 레포 `sources/conversation/<date>-<slug>.md` 에 **직접 저장**(커밋 안 함).
-- 슬랙에 요약 + 저장 경로 응답.
+- 대화를 Gemini로 깔끔히 요약(한국어, 정해진 양식) → 슬랙에 **보여주기만**(저장 안 함).
+- 사용자가 슬랙에서 **대화로 요약을 수정**("이 부분 빼", "더 짧게", "제목 바꿔")하면 에이전트가 맥락에서 고쳐 다시 보여줌.
+- 사용자가 **확정("저장해")하면** 그 시점의 (수정된) 요약을 kb 레포 `sources/conversation/<date>-<slug>.md` 에 저장(커밋 안 함).
 
 **Out (Phase B 이후):**
 - 개념별 분리(concept 문서) — kb-ingest(Claude Code headless).
@@ -32,29 +32,37 @@ ChatGPT 공유링크 → 슬랙 @jarvis + 링크
 - 비동기 처리(백그라운드 + 나중에 슬랙 알림).
 - export 파일(conversations.json) 입력, 멀티도메인 필터.
 
-## 3. 흐름 (동기, 빠름)
+## 3. 흐름 (대화형: 요약 → 수정 → 저장)
 
 ```
 슬랙: @jarvis 이 대화 정리해줘 https://chatgpt.com/share/...
-  ↓ 에이전트가 공유 링크 + 정리 의도 인식 → ingest_chatgpt_share(url) 도구 호출
+  ↓ 에이전트가 공유 링크 + 정리 의도 인식 → summarize_chatgpt_share(url) 도구 호출
   ↓ ① share.FetchConversation(url): raw HTTP GET(브라우저 UA) → 제목 + 대화 텍스트 추출
   ↓ ② gemini.GenerateText(요약 프롬프트, 대화텍스트) → 요약 마크다운
-  ↓ ③ source.Write(repoPath, title, url, 요약) → sources/conversation/<date>-<slug>.md
-  ↓ 도구가 요약 + 저장 경로를 문자열로 반환
-  ↓ 에이전트가 요약을 슬랙에 응답
+  ↓ 도구가 요약을 문자열로 반환 → 에이전트가 슬랙에 보여줌 (저장 안 함)
+
+슬랙: "고루틴 부분만 남기고 더 짧게"  (수정 요청)
+  ↓ 에이전트가 대화 맥락의 요약을 직접 고쳐 다시 보여줌 (도구 호출 없음 — 순수 대화)
+
+슬랙: "저장해"  (확정)
+  ↓ 에이전트가 save_kb_source(title, url, content=현재 요약) 도구 호출
+  ↓ ③ source.Write(repoPath, title, url, content) → sources/conversation/<date>-<slug>.md
+  ↓ 에이전트가 "저장했어: <경로>" 응답
 ```
 
-curl(~1s) + Gemini 요약(~2-5s) → 30초 타임아웃 내 동기 처리 가능. 승인 버튼 불필요(저장 파일은 미커밋이라 가역적).
+각 단계는 한 슬랙 메시지(동기, 30초 내). 요약/수정본은 에이전트 대화 기억에 남아 다음 턴(수정·저장)에서 쓰인다. 별도 승인 버튼 없음 — **"저장해"라는 말이 곧 승인**이고, 요약이 커서 버튼 value(~2KB)에 안 들어가기도 함. 저장 파일은 미커밋이라 가역적(진짜 커밋 승인은 Phase B).
+
+**중요(수정 루프의 핵심):** 수정본은 LLM 대화 맥락에만 존재한다. 그래서 저장 시 **에이전트가 최종 content를 도구 인자로 직접 넘긴다**(서버가 원본을 캐시하면 수정이 반영 안 됨). `save_kb_source` 는 content 를 인자로 받는다.
 
 ## 4. 컴포넌트
 
 | 패키지/파일 | 책임 | 상태 |
 |---|---|---|
 | `internal/knowledge/share.go` | `FetchConversation(ctx, url) (Conversation, error)` — HTTP fetch + HTML에서 제목·대화 추출 | 신규 |
-| `internal/knowledge/source.go` | `WriteSource(repoPath string, c Conversation, summary string) (path string, error)` — 소스 노트 파일 작성 | 신규 |
-| `internal/knowledge/port.go` | `KnowledgePort` 인터페이스(추출+요약+저장 묶음, 테스트용 fake) + `Service` 구현 | 신규 |
+| `internal/knowledge/source.go` | `WriteSource(repoPath, title, url, content string) (path string, error)` — 소스 노트 파일 작성 | 신규 |
+| `internal/knowledge/port.go` | `KnowledgePort` 인터페이스(요약·저장 분리, 테스트용 fake) + `Service` 구현 | 신규 |
 | `internal/gemini/generate.go` | `GenerateText(ctx, system, user string) (string, error)` — 도구 없는 일반 텍스트 생성 | 신규 |
-| `internal/agent/knowledge_tools.go` | `KnowledgeTools(port) []Tool` — `ingest_chatgpt_share` 읽기형 도구 | 신규 |
+| `internal/agent/knowledge_tools.go` | `KnowledgeTools(port) []Tool` — `summarize_chatgpt_share`(읽기) + `save_kb_source`(저장) | 신규 |
 | `internal/agent/agent.go` | system 프롬프트에 ChatGPT 링크 처리 지침 추가 | 변경 |
 | `pkg/config/config.go` | `KnowledgeRepoPath`(env `KNOWLEDGE_REPO_PATH`, 기본 `~/personal-agent/knowledge-base`, `~` 확장) | 변경 |
 | `cmd/server/main.go` | knowledge Service 조립 → 에이전트 도구에 합침 | 변경 |
@@ -95,16 +103,17 @@ func (c *Client) GenerateText(ctx context.Context, system, user string) (string,
 
 ```markdown
 ---
-title: <Conversation.Title>
+title: <title>
 source: chatgpt-share
-url: <Conversation.URL>
+url: <url>
 captured: <YYYY-MM-DD>
 type: conversation
 ---
 
-<Gemini 요약 본문 (## 핵심 / ## 상세 등 자유 구성)>
+<content: Gemini 요약 본문 (## 핵심 / ## 상세 등 자유 구성, 사용자가 수정한 최종본)>
 ```
 
+- `WriteSource`는 frontmatter를 씌우고 `content`(요약 본문)를 그 아래 붙인다. `url`이 빈 문자열이면 해당 줄 생략.
 - 경로: `sources/conversation/<YYYY-MM-DD>-<slug>.md`. slug = title 소문자화 + 비단어→`-` + 60자 컷(기존 kb-ingest 규칙과 동일).
 - `sources/conversation/` 디렉터리 없으면 생성.
 - **중복**: 같은 경로 존재 시 `-2`, `-3` 접미(덮어쓰기 방지).
@@ -112,16 +121,24 @@ type: conversation
 
 ## 8. 에이전트 통합
 
-- 도구 `ingest_chatgpt_share(url string)` — **읽기형**(즉시 실행, 결과 문자열 반환). 변경안/버튼 없음.
-- `Run`: `port.Ingest(ctx, url)` 호출 → 추출+요약+저장 → "요약했어:\n\n<요약>\n\n📁 sources/conversation/...에 저장" 반환.
-- system 프롬프트 추가: "사용자가 `chatgpt.com/share/...` 링크를 정리/저장 요청과 함께 보내면 `ingest_chatgpt_share` 도구를 그 URL로 호출한다."
-- `KnowledgePort` 인터페이스로 주입(테스트 fake):
-  ```go
-  type KnowledgePort interface {
-      Ingest(ctx context.Context, url string) (summary string, path string, err error)
-  }
-  ```
-  `Service`(share + gemini + source 조합)가 구현.
+도구 2개, 둘 다 **읽기형(즉시 실행, 문자열 반환)** — 변경안/버튼 안 씀. 저장은 사용자의 명시적 "저장해"가 승인 역할.
+
+- `summarize_chatgpt_share(url string)`: `port.Summarize(ctx, url)` → 추출+요약 → 요약 마크다운 반환(저장 안 함). 에이전트가 슬랙에 보여줌.
+- `save_kb_source(title, content string, url string)`: `port.SaveSource(ctx, title, url, content)` → `sources/`에 저장 → "저장했어: <경로>" 반환. `content`는 **에이전트가 대화 맥락의 최종(수정된) 요약을 넘긴다**.
+
+system 프롬프트 추가(요지):
+- "사용자가 `chatgpt.com/share/...` 링크를 정리 요청과 함께 보내면 `summarize_chatgpt_share`를 호출하고, **요약을 보여준 뒤 바로 저장하지 마라.**"
+- "사용자가 요약 수정을 요청하면 도구 없이 대화로 고쳐 다시 보여줘라."
+- "사용자가 '저장/저장해/이대로 저장' 등으로 확정하면 그때 `save_kb_source`를 **현재 요약 전체를 content로** 호출하라."
+
+`KnowledgePort` 인터페이스로 주입(테스트 fake):
+```go
+type KnowledgePort interface {
+    Summarize(ctx context.Context, url string) (title string, summary string, err error)
+    SaveSource(ctx context.Context, title, url, content string) (path string, err error)
+}
+```
+`Service`(share + gemini + source 조합)가 구현. `title`은 `Summarize`가 추출해 반환하고, 저장 시 에이전트가 그 제목을 `save_kb_source`에 넘긴다.
 
 ## 9. 에러 처리
 
@@ -135,13 +152,15 @@ type: conversation
 - `internal/knowledge/share.go`: 저장된 실제 share HTML **픽스처**(`testdata/share-go.html`)로 `FetchConversation`의 파싱부 검증 — 제목 추출, 핵심 메시지("고루틴"/"채널" 등) 포함, 플래그/식별자 노이즈 제외. 실제 네트워크 fetch는 라이브 검증.
 - `internal/knowledge/source.go`: 임시 디렉터리에 `WriteSource` → 경로·frontmatter·중복 접미 검증.
 - `internal/gemini/generate.go`: 네트워크라 라이브 검증(기존 컨벤션).
-- `internal/agent`: fake `KnowledgePort` → 도구가 요약+경로 문자열 반환하는지.
+- `internal/agent`: fake `KnowledgePort` → `summarize_chatgpt_share`가 요약 반환·저장 안 함, `save_kb_source`가 넘긴 content로 SaveSource 호출하고 경로 반환하는지.
 - 전 패키지 `go test/vet/build` green.
 
 ## 11. 완료 기준 (수동/라이브)
 
 슬랙에서:
-- `@jarvis 이 대화 정리해줘 <Go 공유링크>` → Go 동시성 요약이 슬랙에 오고, `knowledge-base/sources/conversation/2026-06-18-고랭-장점-설명.md` 생성.
+- `@jarvis 이 대화 정리해줘 <Go 공유링크>` → Go 동시성 요약이 슬랙에 옴(아직 저장 안 됨).
+- 이어서 "더 짧게" / "고루틴 부분만" → 수정된 요약이 다시 옴.
+- "저장해" → `knowledge-base/sources/conversation/2026-06-18-고랭-장점-설명.md` 생성(수정 반영된 내용).
 - 비공유/깨진 링크 → "대화를 못 가져왔어" 안내.
 - 일반 메시지(링크 없음) → 기존 동작 회귀 없음.
 
