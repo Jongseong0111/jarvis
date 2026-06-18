@@ -10,7 +10,7 @@ import (
 func TestSlugify(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"고랭 장점 설명":     "고랭-장점-설명",
+		"고랭 장점 설명":       "고랭-장점-설명",
 		"Hello, World!":  "hello-world",
 		"  공백  많은   제목 ": "공백-많은-제목",
 	}
