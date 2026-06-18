@@ -7,6 +7,49 @@ import (
 	"testing"
 )
 
+func TestWriteSource_sameURLUpdatesInPlace(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	url := "https://chatgpt.com/share/abc"
+	p1, err := WriteSource(repo, "2026-06-18", "고랭 장점 설명", url, "## 초안")
+	if err != nil {
+		t.Fatalf("WriteSource 1: %v", err)
+	}
+	// 같은 URL 로 다시 저장(수정본) → 새 파일이 아니라 같은 파일 갱신이어야 함
+	p2, err := WriteSource(repo, "2026-06-18", "고랭 장점 설명", url, "## 수정본\n- 채널")
+	if err != nil {
+		t.Fatalf("WriteSource 2: %v", err)
+	}
+	if p2 != p1 {
+		t.Fatalf("같은 URL 재저장이 새 파일 생성: %q != %q", p2, p1)
+	}
+	b, _ := os.ReadFile(p1)
+	if !strings.Contains(string(b), "## 수정본") || strings.Contains(string(b), "## 초안") {
+		t.Fatalf("내용 갱신 안 됨:\n%s", b)
+	}
+	// conversation 디렉터리에 파일이 하나뿐이어야 함
+	entries, _ := os.ReadDir(filepath.Join(repo, "sources", "conversation"))
+	if len(entries) != 1 {
+		t.Fatalf("파일 수 = %d, want 1", len(entries))
+	}
+}
+
+func TestWriteSource_differentURLSameTitleGetsNewFile(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	p1, _ := WriteSource(repo, "2026-06-18", "공통제목", "https://chatgpt.com/share/aaa", "a")
+	p2, err := WriteSource(repo, "2026-06-18", "공통제목", "https://chatgpt.com/share/bbb", "b")
+	if err != nil {
+		t.Fatalf("WriteSource: %v", err)
+	}
+	if p2 == p1 {
+		t.Fatal("다른 URL 인데 같은 파일로 덮어씀")
+	}
+	if !strings.HasSuffix(p2, "공통제목-2.md") {
+		t.Fatalf("다른 URL·같은 제목은 -2 여야 함: %q", p2)
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
