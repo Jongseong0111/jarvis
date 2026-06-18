@@ -32,7 +32,7 @@ func NewHandler(router domain.MessageRouter, sender domain.MessageSender) Handle
 // 라우팅 실패는 로그로 남기고 사용자에겐 짧은 안내를 보낸다.
 func (h Handler) Handle(ctx context.Context, in domain.IncomingMessage) error {
 	in.Text = cleanText(in.Text)
-	if in.Text == "" {
+	if in.Text == "" && len(in.Images) == 0 {
 		return nil
 	}
 
