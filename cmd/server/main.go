@@ -32,6 +32,7 @@ func main() {
 
 	// 도구를 가진 LLM 에이전트(자연 대화 + 집정리 도구)
 	geminiClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel)
+	visionClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiVisionModel)
 	notionClient := notion.New(cfg.NotionAPIKey)
 	home := agent.NewNotionHome(
 		notionClient,
@@ -46,7 +47,7 @@ func main() {
 		mapURL = "https://www.notion.so/" + cfg.NotionMapPageID
 	}
 
-	ag := agent.New(geminiClient, agent.HomeTools(home, cfg.NotionHomeURL, mapURL), "")
+	ag := agent.New(geminiClient, visionClient, agent.HomeTools(home, cfg.NotionHomeURL, mapURL), "")
 	handler := slack.NewHandler(ag, client)
 
 	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=HomeApplier, sender=client
