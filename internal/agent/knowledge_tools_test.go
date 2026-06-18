@@ -7,9 +7,9 @@ import (
 )
 
 type fakeKnowledge struct {
-	title, summary             string
+	title, summary                     string
 	savedTitle, savedURL, savedContent string
-	path                       string
+	path                               string
 }
 
 func (f *fakeKnowledge) Summarize(_ context.Context, _ string) (string, string, error) {

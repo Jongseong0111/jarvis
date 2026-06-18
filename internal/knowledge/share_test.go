@@ -40,11 +40,11 @@ func TestParseConversation_emptyErrors(t *testing.T) {
 func TestLooksLikeMessage(t *testing.T) {
 	t.Parallel()
 	cases := map[string]bool{
-		"고루틴은 경량 동시성 단위야. 수를 제한해.":                true,  // 한글 + 길이
+		"고루틴은 경량 동시성 단위야. 수를 제한해.":                        true,  // 한글 + 길이
 		"worker pool limits concurrent goroutines safely": true,  // 영문 문장(공백)
-		"update_custom_instructions_beacon_enabled":        false, // 식별자(공백·한글 없음)
-		"short":                                            false, // 너무 짧음
-		"https://example.com/some/long/path/here":          false, // URL
+		"update_custom_instructions_beacon_enabled":       false, // 식별자(공백·한글 없음)
+		"short": false, // 너무 짧음
+		"https://example.com/some/long/path/here": false, // URL
 	}
 	for in, want := range cases {
 		if got := looksLikeMessage(in); got != want {
