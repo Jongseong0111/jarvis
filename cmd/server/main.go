@@ -9,6 +9,7 @@ import (
 
 	"github.com/Jongseong0111/jarvis/internal/agent"
 	"github.com/Jongseong0111/jarvis/internal/gemini"
+	"github.com/Jongseong0111/jarvis/internal/knowledge"
 	"github.com/Jongseong0111/jarvis/internal/notion"
 	"github.com/Jongseong0111/jarvis/internal/slack"
 	"github.com/Jongseong0111/jarvis/pkg/config"
@@ -47,7 +48,9 @@ func main() {
 		mapURL = "https://www.notion.so/" + cfg.NotionMapPageID
 	}
 
-	ag := agent.New(geminiClient, visionClient, agent.HomeTools(home, cfg.NotionHomeURL, mapURL), "")
+	knowledgeSvc := knowledge.NewService(geminiClient, cfg.KnowledgeRepoPath)
+	tools := append(agent.HomeTools(home, cfg.NotionHomeURL, mapURL), agent.KnowledgeTools(knowledgeSvc)...)
+	ag := agent.New(geminiClient, visionClient, tools, "")
 	handler := slack.NewHandler(ag, client)
 
 	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=HomeApplier, sender=client
