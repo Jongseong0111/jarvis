@@ -183,6 +183,7 @@ type dispatchApplier struct {
 }
 
 // NewDispatchApplier 는 Op 분기 applier 를 만든다.
+// fallback 은 nil 이면 안 된다(매칭 안 되는 op 가 오면 fallback 으로 위임하므로).
 func NewDispatchApplier(byOp map[string]domain.ProposalApplier, fallback domain.ProposalApplier) domain.ProposalApplier {
 	return dispatchApplier{byOp: byOp, fallback: fallback}
 }
