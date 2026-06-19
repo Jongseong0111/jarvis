@@ -13,6 +13,22 @@ import (
 
 const maxTurns = 6
 
+// agentCtxKey 는 에이전트 내부 컨텍스트 키 타입이다.
+type agentCtxKey int
+
+const channelIDKey agentCtxKey = 1
+
+// WithChannelID 는 channelID 를 컨텍스트에 저장한다(ingest 도구 등에서 조회).
+func WithChannelID(ctx context.Context, channelID string) context.Context {
+	return context.WithValue(ctx, channelIDKey, channelID)
+}
+
+// channelIDFromCtx 는 컨텍스트에서 channelID 를 꺼낸다(없으면 "").
+func channelIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(channelIDKey).(string)
+	return v
+}
+
 // DefaultSystemPrompt 는 에이전트의 기본 지시문이다.
 const DefaultSystemPrompt = `너는 사용자의 개인 비서 '자비스'다. 친근하면서도 정중한 **존댓말**(~합니다/~해요)로, 간결한 한국어로 대화한다.
 
@@ -64,6 +80,7 @@ func New(gen generator, vision VisionExtractor, tools []Tool, system string) Age
 
 // Route 는 메시지를 에이전트 루프로 처리한다(잡담→텍스트, 작업→도구/변경안).
 func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Reply, error) {
+	ctx = WithChannelID(ctx, in.ChannelID)
 	if len(in.Images) > 0 && a.vision != nil {
 		names, err := a.vision.ExtractItems(ctx, in.Images)
 		switch {
