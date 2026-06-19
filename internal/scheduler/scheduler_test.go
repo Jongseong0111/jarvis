@@ -32,6 +32,12 @@ func TestNextFire(t *testing.T) {
 			h:    8, m: 0,
 			want: time.Date(2026, 6, 19, 8, 0, 0, 0, seoul),
 		},
+		{
+			name: "UTC now 를 Seoul 로 해석(정각 경계 → 내일)",
+			now:  time.Date(2026, 6, 17, 23, 0, 0, 0, time.UTC), // = 2026-06-18 08:00 KST, 정각이라 내일로
+			h:    8, m: 0,
+			want: time.Date(2026, 6, 19, 8, 0, 0, 0, seoul),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
