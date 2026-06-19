@@ -98,7 +98,7 @@ func main() {
 }
 
 // startBriefings 는 아침/저녁 브리핑을 스케줄러에 등록하고 백그라운드로 돌린다.
-func startBriefings(ctx context.Context, cfg config.Config, client *todoist.Client, sender domain.MessageSender, logger *slog.Logger) error {
+func startBriefings(ctx context.Context, cfg config.Config, client agent.TodoistPort, sender domain.MessageSender, logger *slog.Logger) error {
 	if cfg.TodoistBriefingChannel == "" {
 		logger.Info("브리핑 채널 없음 — 스케줄러 미기동(도구만 활성)")
 		return nil
