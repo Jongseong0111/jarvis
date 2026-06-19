@@ -11,6 +11,7 @@
 - **집 정리** — "안방 수납장1에 체온계 넣었어" → Notion에 등록 제안 → 승인 → 반영 + "우리집 지도" 페이지 자동 갱신. "체온계 어디 있어?" → 위치 검색.
 - **사진 → 물건 판별** — 집 사진을 멘션과 함께 올리면 비전 모델이 물건을 인식해 카테고리별 등록 제안.
 - **지식 저장소 (Phase A)** — ChatGPT 공유 링크를 보내면 대화를 요약해 보여주고, 슬랙에서 대화로 다듬은 뒤 "저장해"하면 `knowledge-base` 레포에 기록.
+- **할일 (Todoist)** — "오늘 Clone Graph 풀기 추가해줘"/"오늘 할일 뭐야?"/"끝났어"로 추가·조회·완료·수정, 삭제는 승인. 아침/저녁 스케줄 브리핑.
 
 ## 구조
 
@@ -68,6 +69,11 @@ config/.env             토큰 (gitignore)
 | `NOTION_HOME_URL` | | 집정리 페이지 링크(안내용) |
 | `NOTION_MAP_PAGE_ID` | | "우리집 지도" 자동 렌더 페이지 |
 | `KNOWLEDGE_REPO_PATH` | | 지식저장소 경로 (기본 `~/personal-agent/knowledge-base`) |
+| `TODOIST_API_TOKEN` | | Todoist 개인 토큰. 없으면 할일 기능 off |
+| `TODOIST_BRIEFING_CHANNEL` | | 브리핑 보낼 Slack 채널/DM ID. 없으면 브리핑 off |
+| `TODOIST_MORNING_TIME` | | 아침 브리핑 시각(기본 `08:00`) |
+| `TODOIST_EVENING_TIME` | | 저녁 브리핑 시각(기본 `21:00`) |
+| `TODOIST_BRIEFING_TZ` | | 브리핑 타임존(기본 `Asia/Seoul`) |
 
 ## 실행
 
@@ -100,5 +106,6 @@ gofmt -l .         # 포맷 점검 (빈 출력 = 정렬됨)
 ## 로드맵
 
 - **지식저장소 Phase B** — 저장된 요약을 Claude Code headless로 개념별 문서로 분리 → 슬랙 승인 → git 커밋.
-- 할일 관리, 스케줄러(주기 알림), ChatGPT 기록 정리(OpenAI 연동).
+- ~~할일 관리, 스케줄러(주기 알림)~~ ✅ Todoist 연동 + 아침/저녁 브리핑 스케줄러 완료.
+- ChatGPT 기록 정리(OpenAI 연동).
 - 입력 채널 확장: 카카오톡, 음성.
