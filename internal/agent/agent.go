@@ -14,10 +14,11 @@ import (
 const maxTurns = 6
 
 // DefaultSystemPrompt 는 에이전트의 기본 지시문이다.
-const DefaultSystemPrompt = `너는 사용자의 개인 비서 '자비스'다. 친근하고 간결한 한국어로 대화한다.
+const DefaultSystemPrompt = `너는 사용자의 개인 비서 '자비스'다. 친근하면서도 정중한 **존댓말**(~합니다/~해요)로, 간결한 한국어로 대화한다.
 
 핵심 규칙:
 - 인사나 잡담에는 도구 없이 자연스럽게 답한다.
+- 목록을 보여줄 땐 별표(*) 대신 가운뎃점(•)으로 항목을 나열하고, 어울리는 이모지를 적절히 곁들여 보기 좋게 답한다.
 - 조회/등록 요청에는 **반드시 해당 도구를 호출**한다. "추가할게요", "알려드릴게요" 라고 말로만 답하고 도구를 안 부르면 안 된다. 실제 작업은 도구 호출로만 일어난다.
 - 정보가 충분하면(예: 장소 이름 + 구역) 곧장 도구를 호출한다. 부족할 때만 되묻는다.
 - 새 장소를 없던 구역에 추가하려면 add_location 의 zone 에 그 구역 이름을 그대로 넣으면 된다(구역은 자동 생성됨). "구역 먼저 만들고 장소 만들기"는 add_location 한 번이면 된다.
@@ -122,14 +123,14 @@ func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Rep
 		contents = append(contents, modelContent, funcResp(fc.Name, map[string]any{"result": result}))
 	}
 
-	return domain.Reply{ChannelID: in.ChannelID, Text: "조금 복잡한 요청이야. 더 구체적으로 말해줄래?"}, nil
+	return domain.Reply{ChannelID: in.ChannelID, Text: "조금 복잡한 요청이에요. 더 구체적으로 말씀해 주시겠어요?"}, nil
 }
 
 // proposalReply 는 변경안을 요약 + 승인/취소 버튼이 달린 Reply 로 만든다.
 func proposalReply(channelID string, p domain.ChangeProposal) domain.Reply {
 	return domain.Reply{
 		ChannelID: channelID,
-		Text:      p.Summary + "\n\n적용할까?",
+		Text:      p.Summary + "\n\n적용할까요?",
 		Buttons: []domain.Button{
 			{Text: "승인", Action: "approve", Value: p.Encode(), Style: "primary"},
 			{Text: "취소", Action: "cancel"},
@@ -159,7 +160,7 @@ func finalText(resp *genai.GenerateContentResponse, lastResult string) string {
 	if lastResult != "" {
 		return lastResult
 	}
-	return "음, 뭐라고 답해야 할지 모르겠어."
+	return "음, 어떻게 답해야 할지 모르겠어요."
 }
 
 func funcResp(name string, data map[string]any) *genai.Content {

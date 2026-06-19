@@ -153,8 +153,8 @@ func TestListTodosTool_empty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out != "할일이 없어." {
-		t.Fatalf("out=%q, want '할일이 없어.'", out)
+	if out != "할 일이 없습니다. 🎉" {
+		t.Fatalf("out=%q, want '할 일이 없습니다. 🎉'", out)
 	}
 }
 

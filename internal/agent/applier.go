@@ -173,7 +173,7 @@ func (a todoistApplier) Apply(ctx context.Context, p domain.ChangeProposal) (dom
 	if err := a.port.DeleteTask(ctx, p.Fields["task_id"]); err != nil {
 		return domain.Reply{}, err
 	}
-	return domain.Reply{Text: "삭제했어: " + p.Fields["content"]}, nil
+	return domain.Reply{Text: "🗑️ '" + p.Fields["content"] + "' 삭제했습니다."}, nil
 }
 
 // dispatchApplier 는 ChangeProposal.Op 로 applier 를 고르고, 없으면 fallback 으로 위임한다.
