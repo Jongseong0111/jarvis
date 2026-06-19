@@ -134,6 +134,9 @@ func (c *Client) UpdateTask(ctx context.Context, id, content, due string) error 
 	if due != "" {
 		body["due_string"] = due
 	}
+	if len(body) == 0 {
+		return nil // 바꿀 내용 없음
+	}
 	return c.do(ctx, http.MethodPost, "/tasks/"+id, body, nil)
 }
 
