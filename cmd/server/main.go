@@ -12,6 +12,7 @@ import (
 
 	"github.com/Jongseong0111/jarvis/domain"
 	"github.com/Jongseong0111/jarvis/internal/agent"
+	"github.com/Jongseong0111/jarvis/internal/claudecode"
 	"github.com/Jongseong0111/jarvis/internal/gemini"
 	"github.com/Jongseong0111/jarvis/internal/knowledge"
 	"github.com/Jongseong0111/jarvis/internal/notion"
@@ -62,6 +63,17 @@ func main() {
 	knowledgeSvc := knowledge.NewService(geminiClient, cfg.KnowledgeRepoPath)
 	tools := append(agent.HomeTools(home, cfg.NotionHomeURL, mapURL), agent.KnowledgeTools(knowledgeSvc)...)
 
+	// Phase B: knowledge ingest — Claude Code 세션 다리
+	ccRunner := claudecode.New()
+	reviewRegistry := agent.NewReviewSessionRegistry()
+	ingestPort := agent.IngestPort{
+		Runner:   ccRunner,
+		Registry: reviewRegistry,
+		Sender:   client,
+		KBPath:   cfg.KnowledgeRepoPath,
+	}
+	tools = append(tools, agent.IngestTools(ingestPort)...)
+
 	// 변경안 적용기: 기본은 집정리, delete_todo 는 Todoist 로 분기
 	var applier domain.ProposalApplier = agent.NewHomeApplier(home, renderer)
 
@@ -81,7 +93,8 @@ func main() {
 	}
 
 	ag := agent.New(geminiClient, visionClient, tools, "")
-	handler := slack.NewHandler(ag, client)
+	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client)
+	handler := slack.NewHandler(reviewRouter, client)
 
 	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=applier(Todoist 활성 시 DispatchApplier, 아니면 HomeApplier), sender=client
 	client.SetInteractionHandler(slack.NewInteractionHandler(applier, client))
