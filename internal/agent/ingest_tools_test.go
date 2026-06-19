@@ -2,6 +2,8 @@ package agent_test
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +12,31 @@ import (
 	"github.com/Jongseong0111/jarvis/internal/agent"
 	"github.com/Jongseong0111/jarvis/internal/claudecode"
 )
+
+// newTempGitRepo 는 테스트용 임시 git 저장소를 만들고 경로를 반환한다.
+// t.Cleanup 으로 자동 삭제된다.
+func newTempGitRepo(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "jarvis-test-repo-*")
+	if err != nil {
+		t.Fatalf("temp dir 생성 실패: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	run := func(args ...string) {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git 명령 실패 %v: %s", args, out)
+		}
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "test@example.com")
+	run("git", "config", "user.name", "Test")
+	// 빈 커밋이 없으면 브랜치 생성이 안 되므로 초기 커밋을 만든다
+	run("git", "commit", "--allow-empty", "-m", "init")
+	return dir
+}
 
 // fakeRunner 는 즉시 고정 결과를 반환하는 Runner 가짜 구현이다.
 type fakeRunner struct {
@@ -43,11 +70,12 @@ func TestIngestTools_startConceptIngest_setsReviewMode(t *testing.T) {
 	sender := &fakeSender{}
 	registry := agent.NewReviewSessionRegistry()
 
+	kbPath := newTempGitRepo(t)
 	port := agent.IngestPort{
 		Runner:   runner,
 		Registry: registry,
 		Sender:   sender,
-		KBPath:   "/kb",
+		KBPath:   kbPath,
 	}
 	tools := agent.IngestTools(port)
 	if len(tools) == 0 {

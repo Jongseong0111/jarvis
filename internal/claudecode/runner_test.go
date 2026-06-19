@@ -28,3 +28,12 @@ func TestParseOutput_invalid(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+func TestParseOutput_isError(t *testing.T) {
+	t.Parallel()
+	data := []byte(`{"type":"result","subtype":"error","session_id":"ses_err","result":"permission denied","is_error":true}`)
+	_, err := claudecode.ParseOutput(data)
+	if err == nil {
+		t.Fatal("is_error=true 인데 에러 반환 안 됨")
+	}
+}

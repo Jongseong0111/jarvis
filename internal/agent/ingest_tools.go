@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 
@@ -67,7 +69,22 @@ func (k *ingestTools) startConceptIngest() Tool {
 			)
 
 			go func() {
-				bgCtx := context.Background()
+				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+
+				// kb 레포에서 브랜치를 생성한다
+				branchCmd := exec.Command("git", "checkout", "-b", branch)
+				branchCmd.Dir = k.port.KBPath
+				if out, err := branchCmd.CombinedOutput(); err != nil {
+					slog.Default().Error("브랜치 생성 실패", "branch", branch, "out", string(out), "error", err)
+					_ = k.port.Sender.Send(bgCtx, domain.Reply{
+						ChannelID: channelID,
+						Text:      "🚨 브랜치 생성 중 문제가 생겼어요: " + string(out),
+					})
+					k.port.Registry.Exit(channelID)
+					return
+				}
+
 				result, err := k.port.Runner.Run(bgCtx, k.port.KBPath, prompt)
 				if err != nil {
 					slog.Default().Error("ingest 실패", "channel", channelID, "error", err)

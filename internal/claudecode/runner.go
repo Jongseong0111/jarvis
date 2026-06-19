@@ -52,6 +52,7 @@ func (r *CLIRunner) exec(ctx context.Context, dir string, args []string) (RunRes
 type cliOutput struct {
 	SessionID string `json:"session_id"`
 	Result    string `json:"result"`
+	IsError   bool   `json:"is_error"`
 }
 
 // ParseOutput 은 claude --output-format json 출력을 RunResult 로 파싱한다.
@@ -59,6 +60,9 @@ func ParseOutput(data []byte) (RunResult, error) {
 	var o cliOutput
 	if err := json.Unmarshal(data, &o); err != nil {
 		return RunResult{}, fmt.Errorf("claude 출력 파싱 실패: %w", err)
+	}
+	if o.IsError {
+		return RunResult{}, fmt.Errorf("claude 실행 오류: %s", o.Result)
 	}
 	return RunResult{SessionID: o.SessionID, Text: o.Result}, nil
 }

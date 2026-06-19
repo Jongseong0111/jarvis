@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Jongseong0111/jarvis/domain"
 	"github.com/Jongseong0111/jarvis/internal/claudecode"
@@ -55,7 +56,8 @@ func (r *ReviewRouter) Route(ctx context.Context, in domain.IncomingMessage) (do
 func (r *ReviewRouter) curate(channelID string, session ReviewSession, text string) (domain.Reply, error) {
 	r.registry.SetBusy(channelID, true)
 	go func() {
-		bgCtx := context.Background()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
 		result, err := r.runner.Resume(bgCtx, session.SessionID, text)
 		r.registry.SetBusy(channelID, false)
 		if err != nil {
@@ -73,7 +75,8 @@ func (r *ReviewRouter) approve(channelID string, session ReviewSession) (domain.
 	r.registry.SetBusy(channelID, true)
 	approvePrompt := "/kb-approve 한 뒤, 이 브랜치를 push 하고 gh 로 main 대상 PR 을 생성해줘."
 	go func() {
-		bgCtx := context.Background()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
 		result, err := r.runner.Resume(bgCtx, session.SessionID, approvePrompt)
 		r.registry.Exit(channelID)
 		if err != nil {
