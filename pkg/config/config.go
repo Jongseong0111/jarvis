@@ -33,6 +33,9 @@ type Config struct {
 	TodoistMorning         string // "HH:MM"
 	TodoistEvening         string // "HH:MM"
 	TodoistTZ              string
+
+	DigestTime    string   // "HH:MM", 기본 "09:00"
+	DigestRSSURLs []string // 추가 RSS 피드 URL 목록
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -60,6 +63,9 @@ func New() (Config, error) {
 		TodoistMorning:         getenv("TODOIST_MORNING_TIME", "08:00"),
 		TodoistEvening:         getenv("TODOIST_EVENING_TIME", "21:00"),
 		TodoistTZ:              getenv("TODOIST_BRIEFING_TZ", "Asia/Seoul"),
+
+		DigestTime:    getenv("DIGEST_TIME", "09:00"),
+		DigestRSSURLs: parseCommaList(os.Getenv("DIGEST_RSS_URLS")),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -101,6 +107,20 @@ func expandHome(p string) string {
 		}
 	}
 	return p
+}
+
+// parseCommaList 는 쉼표로 구분된 문자열을 슬라이스로 파싱한다(빈 값 제거).
+func parseCommaList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // ParseHHMM 은 "HH:MM" 문자열을 시·분으로 파싱한다.

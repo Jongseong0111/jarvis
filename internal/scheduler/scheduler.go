@@ -11,11 +11,12 @@ import (
 
 // Job 은 매일 지정 시각에 실행할 작업이다.
 type Job struct {
-	Name string
-	Hour int
-	Min  int
-	TZ   *time.Location
-	Fn   func(ctx context.Context)
+	Name    string
+	Hour    int
+	Min     int
+	TZ      *time.Location
+	Timeout time.Duration // 0 이면 30s 기본
+	Fn      func(ctx context.Context)
 }
 
 // Scheduler 는 등록된 Job 들을 각자 goroutine 으로 돌린다.
@@ -60,7 +61,11 @@ func (s *Scheduler) fire(ctx context.Context, j Job, logger *slog.Logger) {
 			logger.Error("스케줄 작업 패닉", "job", j.Name, "recover", r)
 		}
 	}()
-	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	timeout := j.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	j.Fn(runCtx)
 }
