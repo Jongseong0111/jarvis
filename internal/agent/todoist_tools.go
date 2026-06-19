@@ -122,7 +122,10 @@ func (t todoistTools) updateTodo() Tool {
 			if err := t.port.UpdateTask(ctx, task.ID, content, due); err != nil {
 				return "", err
 			}
-			return "수정했어: " + task.Content, nil
+			if content != "" {
+				return "수정했어: " + content, nil
+			}
+			return "수정했어: " + task.Content + " (마감: " + due + ")", nil
 		},
 	}
 }
