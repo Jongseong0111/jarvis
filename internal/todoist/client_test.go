@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +39,12 @@ func TestAddTask(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method=%s", r.Method)
 		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+			t.Errorf("auth header=%q", got)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("content-type=%q", ct)
+		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["content"] != "새 할일" || body["due_string"] != "내일" {
@@ -63,6 +70,12 @@ func TestCompleteTask(t *testing.T) {
 	var hitPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hitPath = r.URL.Path
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+			t.Errorf("auth header=%q", got)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method=%s", r.Method)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
@@ -89,5 +102,7 @@ func TestDeleteTask_non2xx(t *testing.T) {
 	c := NewWithBase("tok", srv.URL)
 	if err := c.DeleteTask(context.Background(), "1"); err == nil {
 		t.Fatal("에러를 기대했지만 nil")
+	} else if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("에러에 응답 본문이 없음: %v", err)
 	}
 }
