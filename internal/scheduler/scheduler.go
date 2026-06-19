@@ -40,6 +40,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 func (s *Scheduler) runJob(ctx context.Context, j Job) {
 	logger := log.FromContext(ctx)
 	for {
+		// fire 종료 후 현재 시각 기준으로 다음 발화를 재계산 — 실행이 예정 시각을 넘겨도 당일 재실행은 없음
 		next := nextFire(time.Now().In(j.TZ), j.Hour, j.Min, j.TZ)
 		timer := time.NewTimer(time.Until(next))
 		select {
