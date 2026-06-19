@@ -47,7 +47,7 @@ type fakeRunner struct {
 func (f *fakeRunner) Run(_ context.Context, _, _ string) (claudecode.RunResult, error) {
 	return f.result, f.err
 }
-func (f *fakeRunner) Resume(_ context.Context, _, _ string) (claudecode.RunResult, error) {
+func (f *fakeRunner) Resume(_ context.Context, _, _, _ string) (claudecode.RunResult, error) {
 	return f.result, f.err
 }
 

@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 )
@@ -16,7 +17,9 @@ type RunResult struct {
 // Runner 는 Claude Code CLI 를 실행하는 능력이다(테스트에서 fake 주입).
 type Runner interface {
 	Run(ctx context.Context, dir, prompt string) (RunResult, error)
-	Resume(ctx context.Context, sessionID, prompt string) (RunResult, error)
+	// Resume 은 dir 경로에서 기존 세션을 이어 메시지를 보낸다.
+	// claude 세션은 프로젝트 경로 기준으로 저장되므로 원래 Run 에 사용한 dir 을 그대로 전달해야 한다.
+	Resume(ctx context.Context, dir, sessionID, prompt string) (RunResult, error)
 }
 
 // CLIRunner 는 로컬 claude CLI 를 사용하는 Runner 구현이다.
@@ -31,10 +34,10 @@ func (r *CLIRunner) Run(ctx context.Context, dir, prompt string) (RunResult, err
 	return r.exec(ctx, dir, args)
 }
 
-// Resume 은 기존 session_id 에 이어 메시지를 보낸다.
-func (r *CLIRunner) Resume(ctx context.Context, sessionID, prompt string) (RunResult, error) {
+// Resume 은 dir 경로에서 기존 session_id 에 이어 메시지를 보낸다.
+func (r *CLIRunner) Resume(ctx context.Context, dir, sessionID, prompt string) (RunResult, error) {
 	args := []string{"-p", prompt, "--resume", sessionID, "--output-format", "json", "--permission-mode", "acceptEdits"}
-	return r.exec(ctx, "", args)
+	return r.exec(ctx, dir, args)
 }
 
 func (r *CLIRunner) exec(ctx context.Context, dir string, args []string) (RunResult, error) {
@@ -44,6 +47,10 @@ func (r *CLIRunner) exec(ctx context.Context, dir string, args []string) (RunRes
 	}
 	out, err := cmd.Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return RunResult{}, fmt.Errorf("claude 실행 실패: %w\nstderr: %s", err, exitErr.Stderr)
+		}
 		return RunResult{}, fmt.Errorf("claude 실행 실패: %w", err)
 	}
 	return ParseOutput(out)

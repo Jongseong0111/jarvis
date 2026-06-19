@@ -93,7 +93,7 @@ func main() {
 	}
 
 	ag := agent.New(geminiClient, visionClient, tools, "")
-	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client)
+	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client, cfg.KnowledgeRepoPath)
 	handler := slack.NewHandler(reviewRouter, client)
 
 	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=applier(Todoist 활성 시 DispatchApplier, 아니면 HomeApplier), sender=client

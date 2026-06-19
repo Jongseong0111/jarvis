@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -27,10 +28,10 @@ type ingestTools struct {
 	port IngestPort
 }
 
-// IngestTools 는 start_concept_ingest 도구 목록을 만든다.
+// IngestTools 는 KB ingest 관련 도구 목록을 만든다.
 func IngestTools(port IngestPort) []Tool {
 	k := &ingestTools{port: port}
-	return []Tool{k.startConceptIngest()}
+	return []Tool{k.startConceptIngest(), k.resumeKBReview()}
 }
 
 func (k *ingestTools) startConceptIngest() Tool {
@@ -108,8 +109,102 @@ func (k *ingestTools) startConceptIngest() Tool {
 	}
 }
 
-// slugFrom 은 소스 파일 경로에서 브랜치/slug 이름을 만든다.
+func (k *ingestTools) resumeKBReview() Tool {
+	return Tool{
+		Decl: &genai.FunctionDeclaration{
+			Name:        "resume_kb_review",
+			Description: "서버 재시작 후 기존 KB ingest 세션을 리뷰 모드로 복원한다. session_id 를 모르면 생략해도 된다(최신 세션 자동 조회).",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"session_id": strSchema("복원할 claude 세션 UUID. 모르면 빈 문자열로 전달하면 자동 조회"),
+				"branch":     strSchema("ingest 브랜치명 (예: kb/ingest-rest-api). 모르면 빈 문자열"),
+			}, "branch"),
+		},
+		Run: func(ctx context.Context, args map[string]any) (string, error) {
+			channelID := channelIDFromCtx(ctx)
+			if channelID == "" {
+				return "", fmt.Errorf("채널 ID 없음")
+			}
+			if _, ok := k.port.Registry.Get(channelID); ok {
+				return "이미 리뷰 세션이 활성화되어 있어요.", nil
+			}
+			sessionID := strArg(args, "session_id")
+			if sessionID == "" {
+				var err error
+				sessionID, err = latestKBSessionID(k.port.KBPath)
+				if err != nil {
+					return "최신 KB 세션을 찾지 못했어요: " + err.Error(), nil
+				}
+			}
+			branch := strArg(args, "branch")
+			if branch == "" {
+				branch = "(알 수 없음)"
+			}
+			k.port.Registry.Enter(channelID, ReviewSession{
+				SessionID: sessionID,
+				Branch:    branch,
+				Busy:      false,
+			})
+			return fmt.Sprintf("✅ 리뷰 모드 복원 완료. 브랜치: `%s`\n이제 수정 요청을 보내거나 \"승인\"으로 PR을 만들 수 있어요.", branch), nil
+		},
+	}
+}
+
+// latestKBSessionID 는 kb 레포에 해당하는 claude 세션 중 가장 최근 것을 반환한다.
+func latestKBSessionID(kbPath string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	// claude 는 절대경로의 '/' 를 '-' 로 치환해 ~/.claude/projects/ 아래 저장한다.
+	// 예) /Users/foo/kb → -Users-foo-kb
+	dirName := strings.ReplaceAll(kbPath, "/", "-")
+	sessionDir := filepath.Join(home, ".claude", "projects", dirName)
+
+	entries, err := os.ReadDir(sessionDir)
+	if err != nil {
+		return "", fmt.Errorf("세션 디렉터리 없음: %s", sessionDir)
+	}
+	var latest os.DirEntry
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		if latest == nil {
+			latest = e
+			continue
+		}
+		li, _ := latest.Info()
+		ei, _ := e.Info()
+		if ei != nil && li != nil && ei.ModTime().After(li.ModTime()) {
+			latest = e
+		}
+	}
+	if latest == nil {
+		return "", fmt.Errorf("세션 파일 없음")
+	}
+	return strings.TrimSuffix(latest.Name(), ".jsonl"), nil
+}
+
+// slugFrom 은 소스 파일 경로에서 git 브랜치명 안전 slug 를 만든다.
+// 공백·한글 등 비ASCII 는 하이픈으로 치환하고 중복 하이픈을 정리한다.
 func slugFrom(sourcePath string) string {
 	base := filepath.Base(sourcePath)
-	return strings.TrimSuffix(base, filepath.Ext(base))
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	var b strings.Builder
+	for _, r := range strings.ToLower(base) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	slug := b.String()
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		slug = "ingest"
+	}
+	return slug
 }

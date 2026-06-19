@@ -17,11 +17,12 @@ type ReviewRouter struct {
 	registry *ReviewSessionRegistry
 	runner   claudecode.Runner
 	sender   domain.MessageSender
+	kbPath   string
 }
 
 // NewReviewRouter 는 ReviewRouter 를 만든다.
-func NewReviewRouter(base domain.MessageRouter, registry *ReviewSessionRegistry, runner claudecode.Runner, sender domain.MessageSender) *ReviewRouter {
-	return &ReviewRouter{base: base, registry: registry, runner: runner, sender: sender}
+func NewReviewRouter(base domain.MessageRouter, registry *ReviewSessionRegistry, runner claudecode.Runner, sender domain.MessageSender, kbPath string) *ReviewRouter {
+	return &ReviewRouter{base: base, registry: registry, runner: runner, sender: sender, kbPath: kbPath}
 }
 
 // Route 는 채널 상태에 따라 메시지를 라우팅한다.
@@ -58,7 +59,7 @@ func (r *ReviewRouter) curate(channelID string, session ReviewSession, text stri
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		result, err := r.runner.Resume(bgCtx, session.SessionID, text)
+		result, err := r.runner.Resume(bgCtx, r.kbPath, session.SessionID, text)
 		r.registry.SetBusy(channelID, false)
 		if err != nil {
 			slog.Default().Error("curate resume 실패", "channel", channelID, "error", err)
@@ -77,7 +78,7 @@ func (r *ReviewRouter) approve(channelID string, session ReviewSession) (domain.
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		result, err := r.runner.Resume(bgCtx, session.SessionID, approvePrompt)
+		result, err := r.runner.Resume(bgCtx, r.kbPath, session.SessionID, approvePrompt)
 		r.registry.Exit(channelID)
 		if err != nil {
 			slog.Default().Error("approve 실패", "channel", channelID, "error", err)
