@@ -13,6 +13,7 @@ import (
 	"github.com/Jongseong0111/jarvis/domain"
 	"github.com/Jongseong0111/jarvis/internal/agent"
 	"github.com/Jongseong0111/jarvis/internal/claudecode"
+	"github.com/Jongseong0111/jarvis/internal/devdigest"
 	"github.com/Jongseong0111/jarvis/internal/gemini"
 	"github.com/Jongseong0111/jarvis/internal/knowledge"
 	"github.com/Jongseong0111/jarvis/internal/notion"
@@ -84,7 +85,7 @@ func main() {
 			map[string]domain.ProposalApplier{"delete_todo": agent.NewTodoistApplier(todoistClient)},
 			applier,
 		)
-		if err := startBriefings(ctx, cfg, todoistClient, client, logger); err != nil {
+		if err := startBriefings(ctx, cfg, todoistClient, geminiClient, client, logger); err != nil {
 			logger.Error("브리핑 스케줄러 시작 실패", "error", err)
 			os.Exit(1)
 		}
@@ -110,8 +111,8 @@ func main() {
 	}
 }
 
-// startBriefings 는 아침/저녁 브리핑을 스케줄러에 등록하고 백그라운드로 돌린다.
-func startBriefings(ctx context.Context, cfg config.Config, client agent.TodoistPort, sender domain.MessageSender, logger *slog.Logger) error {
+// startBriefings 는 아침/저녁/다이제스트 브리핑을 스케줄러에 등록하고 백그라운드로 돌린다.
+func startBriefings(ctx context.Context, cfg config.Config, todoistClient agent.TodoistPort, geminiClient *gemini.Client, sender domain.MessageSender, logger *slog.Logger) error {
 	if cfg.TodoistBriefingChannel == "" {
 		logger.Info("브리핑 채널 없음 — 스케줄러 미기동(도구만 활성)")
 		return nil
@@ -130,10 +131,32 @@ func startBriefings(ctx context.Context, cfg config.Config, client agent.Todoist
 	}
 	sched := scheduler.New()
 	sched.Register(scheduler.Job{Name: "morning", Hour: mh, Min: mm, TZ: tz,
-		Fn: agent.NewMorningBriefing(client, sender, cfg.TodoistBriefingChannel)})
+		Fn: agent.NewMorningBriefing(todoistClient, sender, cfg.TodoistBriefingChannel)})
 	sched.Register(scheduler.Job{Name: "evening", Hour: eh, Min: em, TZ: tz,
-		Fn: agent.NewEveningBriefing(client, sender, cfg.TodoistBriefingChannel)})
+		Fn: agent.NewEveningBriefing(todoistClient, sender, cfg.TodoistBriefingChannel)})
+
+	// digest 브리핑
+	dh, dm, err := config.ParseHHMM(cfg.DigestTime)
+	if err != nil {
+		return fmt.Errorf("다이제스트 시각: %w", err)
+	}
+	fetcher := devdigest.NewFetcher(cfg.DigestRSSURLs)
+	generator := devdigest.NewGenerator(geminiClient)
+	sched.Register(scheduler.Job{
+		Name:    "dev-digest",
+		Hour:    dh,
+		Min:     dm,
+		TZ:      tz,
+		Timeout: 60 * time.Second,
+		Fn:      agent.NewDevDigestBriefing(fetcher, generator, sender, cfg.TodoistBriefingChannel),
+	})
+
 	go sched.Run(ctx)
-	logger.Info("브리핑 스케줄러 기동", "morning", cfg.TodoistMorning, "evening", cfg.TodoistEvening, "tz", cfg.TodoistTZ)
+	logger.Info("브리핑 스케줄러 기동",
+		"morning", cfg.TodoistMorning,
+		"evening", cfg.TodoistEvening,
+		"digest", cfg.DigestTime,
+		"tz", cfg.TodoistTZ,
+	)
 	return nil
 }
