@@ -30,7 +30,7 @@ func TestReviewRouter_notInReview_delegatesToBase(t *testing.T) {
 	runner := &fakeRunner{}
 	sender := &fakeSender{}
 
-	rr := agent.NewReviewRouter(base, registry, runner, sender)
+	rr := agent.NewReviewRouter(base, registry, runner, sender, "/tmp/kb")
 	reply, err := rr.Route(context.Background(), domain.IncomingMessage{ChannelID: "ch1", Text: "안녕"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -52,7 +52,7 @@ func TestReviewRouter_inReview_busy_returnsBusyMessage(t *testing.T) {
 
 	registry.Enter("ch1", agent.ReviewSession{SessionID: "ses1", Busy: true, Slug: "foo"})
 
-	rr := agent.NewReviewRouter(base, registry, runner, sender)
+	rr := agent.NewReviewRouter(base, registry, runner, sender, "/tmp/kb")
 	reply, err := rr.Route(context.Background(), domain.IncomingMessage{ChannelID: "ch1", Text: "channel 빼"})
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestReviewRouter_inReview_cancel_exitsMode(t *testing.T) {
 
 	registry.Enter("ch1", agent.ReviewSession{SessionID: "ses1", Branch: "kb/ingest-foo", Slug: "foo"})
 
-	rr := agent.NewReviewRouter(base, registry, runner, sender)
+	rr := agent.NewReviewRouter(base, registry, runner, sender, "/tmp/kb")
 	reply, err := rr.Route(context.Background(), domain.IncomingMessage{ChannelID: "ch1", Text: "취소"})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestReviewRouter_inReview_curate_sendsAsyncAndReturnsPending(t *testing.T) 
 
 	registry.Enter("ch1", agent.ReviewSession{SessionID: "ses1", Slug: "foo"})
 
-	rr := agent.NewReviewRouter(base, registry, runner, sender)
+	rr := agent.NewReviewRouter(base, registry, runner, sender, "/tmp/kb")
 	reply, err := rr.Route(context.Background(), domain.IncomingMessage{ChannelID: "ch1", Text: "channel 빼"})
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestReviewRouter_inReview_approve_exitsAndSendsAsync(t *testing.T) {
 
 	registry.Enter("ch1", agent.ReviewSession{SessionID: "ses1", Branch: "kb/ingest-foo", Slug: "foo"})
 
-	rr := agent.NewReviewRouter(base, registry, runner, sender)
+	rr := agent.NewReviewRouter(base, registry, runner, sender, "/tmp/kb")
 	_, err := rr.Route(context.Background(), domain.IncomingMessage{ChannelID: "ch1", Text: "승인"})
 	if err != nil {
 		t.Fatal(err)
