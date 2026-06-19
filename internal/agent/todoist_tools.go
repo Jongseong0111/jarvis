@@ -26,15 +26,18 @@ func (t todoistTools) listTodos() Tool {
 	return Tool{
 		Decl: &genai.FunctionDeclaration{
 			Name:        "list_todos",
-			Description: "할일을 조회한다. filter 미지정 시 오늘+밀린 할일. filter 는 Todoist 필터 문법(예: today, overdue, tomorrow, today | overdue).",
+			Description: "할일을 조회한다. filter 미지정 시 오늘+밀린 할일. 전체(반복·스케줄 포함)를 보려면 filter=\"all\". 그 외엔 Todoist 필터 문법(예: today, overdue, tomorrow, today | overdue).",
 			Parameters: objSchema(map[string]*genai.Schema{
-				"filter": strSchema("Todoist 필터(선택). 기본 'today | overdue'"),
+				"filter": strSchema("Todoist 필터(선택). 기본 'today | overdue'. 전체는 'all'."),
 			}),
 		},
 		Run: func(ctx context.Context, args map[string]any) (string, error) {
-			filter := strArg(args, "filter")
-			if filter == "" {
+			filter := strings.TrimSpace(strArg(args, "filter"))
+			switch strings.ToLower(filter) {
+			case "":
 				filter = "today | overdue"
+			case "all", "전체", "모든", "모두":
+				filter = "" // 빈 필터 → 전체 활성 할일(/tasks)
 			}
 			tasks, err := t.port.ListTasks(ctx, filter)
 			if err != nil {
