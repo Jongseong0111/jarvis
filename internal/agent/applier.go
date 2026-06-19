@@ -155,3 +155,41 @@ func parseQty(s string) *int {
 	}
 	return nil
 }
+
+// todoistApplier 는 delete_todo 변경안을 Todoist 에 반영한다.
+type todoistApplier struct {
+	port TodoistPort
+}
+
+// NewTodoistApplier 는 Todoist 삭제 승인 처리기를 만든다.
+func NewTodoistApplier(port TodoistPort) domain.ProposalApplier {
+	return todoistApplier{port: port}
+}
+
+func (a todoistApplier) Apply(ctx context.Context, p domain.ChangeProposal) (domain.Reply, error) {
+	if p.Op != "delete_todo" {
+		return domain.Reply{}, fmt.Errorf("todoistApplier: 지원하지 않는 op %q", p.Op)
+	}
+	if err := a.port.DeleteTask(ctx, p.Fields["task_id"]); err != nil {
+		return domain.Reply{}, err
+	}
+	return domain.Reply{Text: "삭제했어: " + p.Fields["content"]}, nil
+}
+
+// dispatchApplier 는 ChangeProposal.Op 로 applier 를 고르고, 없으면 fallback 으로 위임한다.
+type dispatchApplier struct {
+	byOp     map[string]domain.ProposalApplier
+	fallback domain.ProposalApplier
+}
+
+// NewDispatchApplier 는 Op 분기 applier 를 만든다.
+func NewDispatchApplier(byOp map[string]domain.ProposalApplier, fallback domain.ProposalApplier) domain.ProposalApplier {
+	return dispatchApplier{byOp: byOp, fallback: fallback}
+}
+
+func (a dispatchApplier) Apply(ctx context.Context, p domain.ChangeProposal) (domain.Reply, error) {
+	if ap, ok := a.byOp[p.Op]; ok {
+		return ap.Apply(ctx, p)
+	}
+	return a.fallback.Apply(ctx, p)
+}
