@@ -21,11 +21,11 @@ func NewMorningBriefing(port TodoistPort, sender domain.MessageSender, channel s
 			log.FromContext(ctx).Error("아침 브리핑 조회 실패", "error", err)
 			return
 		}
-		text := "☀️ 할일 없어. 좋은 하루!"
+		text := "☀️ 오늘 마감 할일이 없어. 좋은 하루!"
 		if len(tasks) > 0 {
 			text = formatBriefing("☀️ 오늘 할일 + 밀린 거", tasks)
 		}
-		send(ctx, sender, channel, text)
+		sendText(ctx, sender, channel, text)
 	}
 }
 
@@ -40,11 +40,11 @@ func NewEveningBriefing(port TodoistPort, sender domain.MessageSender, channel s
 		if len(tasks) == 0 {
 			return // 무음
 		}
-		send(ctx, sender, channel, formatBriefing("🌙 오늘 미완료 / 내일 할일", tasks))
+		sendText(ctx, sender, channel, formatBriefing("🌙 오늘 미완료 / 내일 할일", tasks))
 	}
 }
 
-func send(ctx context.Context, sender domain.MessageSender, channel, text string) {
+func sendText(ctx context.Context, sender domain.MessageSender, channel, text string) {
 	if err := sender.Send(ctx, domain.Reply{ChannelID: channel, Text: text}); err != nil {
 		log.FromContext(ctx).Error("브리핑 전송 실패", "error", err)
 	}
