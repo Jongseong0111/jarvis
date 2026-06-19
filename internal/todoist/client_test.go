@@ -15,11 +15,16 @@ func TestListTasks(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
 			t.Errorf("auth header=%q", got)
 		}
-		if got := r.URL.Query().Get("filter"); got != "today" {
-			t.Errorf("filter=%q", got)
+		// v1: 필터는 /tasks/filter?query= 별도 엔드포인트
+		if r.URL.Path != "/tasks/filter" {
+			t.Errorf("path=%q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("query"); got != "today" {
+			t.Errorf("query=%q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"id":"1","content":"Clone Graph","due":{"string":"오늘"},"project_id":"p1","url":"https://todoist.com/showTask?id=1"}]`))
+		// v1: {"results":[...],"next_cursor":...} 래퍼
+		_, _ = w.Write([]byte(`{"results":[{"id":"1","content":"Clone Graph","due":{"string":"오늘","date":"2026-06-19"},"project_id":"p1"}],"next_cursor":null}`))
 	}))
 	defer srv.Close()
 
@@ -29,6 +34,28 @@ func TestListTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(tasks) != 1 || tasks[0].Content != "Clone Graph" || tasks[0].Due != "오늘" || tasks[0].ID != "1" {
+		t.Fatalf("got %+v", tasks)
+	}
+}
+
+func TestListTasks_noFilterUsesPlainPath(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// filter 가 없으면 전체 목록 /tasks (필터 엔드포인트 아님)
+		if r.URL.Path != "/tasks" {
+			t.Errorf("path=%q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[{"id":"9","content":"전체"}],"next_cursor":null}`))
+	}))
+	defer srv.Close()
+
+	c := NewWithBase("tok", srv.URL)
+	tasks, err := c.ListTasks(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].ID != "9" {
 		t.Fatalf("got %+v", tasks)
 	}
 }
