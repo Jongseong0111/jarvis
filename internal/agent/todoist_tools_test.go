@@ -10,6 +10,7 @@ import (
 
 type fakeTodoist struct {
 	tasks          []todoist.Task
+	listFilter     string // ListTasks 가 마지막으로 받은 필터(검증용)
 	added          *todoist.Task
 	completed      string
 	deletedIDs     []string
@@ -18,7 +19,8 @@ type fakeTodoist struct {
 	updatedDue     string
 }
 
-func (f *fakeTodoist) ListTasks(_ context.Context, _ string) ([]todoist.Task, error) {
+func (f *fakeTodoist) ListTasks(_ context.Context, filter string) ([]todoist.Task, error) {
+	f.listFilter = filter
 	return f.tasks, nil
 }
 func (f *fakeTodoist) AddTask(_ context.Context, content, due, _ string) (todoist.Task, error) {
@@ -34,6 +36,37 @@ func (f *fakeTodoist) UpdateTask(_ context.Context, id, content, due string) err
 func (f *fakeTodoist) DeleteTask(_ context.Context, id string) error {
 	f.deletedIDs = append(f.deletedIDs, id)
 	return nil
+}
+
+func TestListTodosTool_filterMapping(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{"미지정 → 오늘+밀린", "", "today | overdue"},
+		{"all → 전체(빈 필터)", "all", ""},
+		{"전체(한글) → 전체", "전체", ""},
+		{"명시 필터는 그대로", "tomorrow", "tomorrow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := &fakeTodoist{tasks: []todoist.Task{{ID: "1", Content: "x"}}}
+			tool := toolByName(TodoistTools(f), "list_todos")
+			args := map[string]any{}
+			if tt.arg != "" {
+				args["filter"] = tt.arg
+			}
+			if _, err := tool.Run(context.Background(), args); err != nil {
+				t.Fatal(err)
+			}
+			if f.listFilter != tt.want {
+				t.Fatalf("filter=%q, want %q", f.listFilter, tt.want)
+			}
+		})
+	}
 }
 
 func toolByName(tools []Tool, name string) Tool {
