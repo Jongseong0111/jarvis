@@ -9,10 +9,13 @@ import (
 )
 
 type fakeTodoist struct {
-	tasks      []todoist.Task
-	added      *todoist.Task
-	completed  string
-	deletedIDs []string
+	tasks          []todoist.Task
+	added          *todoist.Task
+	completed      string
+	deletedIDs     []string
+	updatedID      string
+	updatedContent string
+	updatedDue     string
 }
 
 func (f *fakeTodoist) ListTasks(_ context.Context, _ string) ([]todoist.Task, error) {
@@ -23,8 +26,11 @@ func (f *fakeTodoist) AddTask(_ context.Context, content, due, _ string) (todois
 	f.added = &t
 	return t, nil
 }
-func (f *fakeTodoist) CompleteTask(_ context.Context, id string) error    { f.completed = id; return nil }
-func (f *fakeTodoist) UpdateTask(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeTodoist) CompleteTask(_ context.Context, id string) error { f.completed = id; return nil }
+func (f *fakeTodoist) UpdateTask(_ context.Context, id, content, due string) error {
+	f.updatedID, f.updatedContent, f.updatedDue = id, content, due
+	return nil
+}
 func (f *fakeTodoist) DeleteTask(_ context.Context, id string) error {
 	f.deletedIDs = append(f.deletedIDs, id)
 	return nil
@@ -103,5 +109,34 @@ func TestDeleteTodoTool_proposes(t *testing.T) {
 	}
 	if p.Op != "delete_todo" || p.Fields["task_id"] != "5" {
 		t.Fatalf("proposal=%+v", p)
+	}
+}
+
+func TestListTodosTool_empty(t *testing.T) {
+	t.Parallel()
+	f := &fakeTodoist{tasks: nil}
+	tool := toolByName(TodoistTools(f), "list_todos")
+	out, err := tool.Run(context.Background(), map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "할일이 없어." {
+		t.Fatalf("out=%q, want '할일이 없어.'", out)
+	}
+}
+
+func TestUpdateTodoTool(t *testing.T) {
+	t.Parallel()
+	f := &fakeTodoist{tasks: []todoist.Task{{ID: "3", Content: "옛 이름"}}}
+	tool := toolByName(TodoistTools(f), "update_todo")
+	out, err := tool.Run(context.Background(), map[string]any{"query": "옛", "content": "새 이름"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.updatedID != "3" || f.updatedContent != "새 이름" {
+		t.Fatalf("port got id=%q content=%q", f.updatedID, f.updatedContent)
+	}
+	if !strings.Contains(out, "새 이름") {
+		t.Fatalf("메시지가 새 내용을 안 보여줌: %q", out)
 	}
 }

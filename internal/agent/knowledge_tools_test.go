@@ -20,15 +20,6 @@ func (f *fakeKnowledge) SaveSource(_ context.Context, title, url, content string
 	return f.path, nil
 }
 
-func toolByName(tools []Tool, name string) Tool {
-	for _, t := range tools {
-		if t.Decl.Name == name {
-			return t
-		}
-	}
-	return Tool{}
-}
-
 func TestKnowledge_summarizeTool_returnsSummaryNoSave(t *testing.T) {
 	t.Parallel()
 	fk := &fakeKnowledge{title: "고랭 장점 설명", summary: "## 핵심\n- 고루틴"}
