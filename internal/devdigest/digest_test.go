@@ -1,7 +1,6 @@
 package devdigest
 
 import (
-	"context"
 	"strings"
 	"testing"
 )
@@ -57,8 +56,3 @@ func TestBuildPrompt_containsItems(t *testing.T) {
 
 // 컴파일 검증: Generator 인터페이스를 GeminiGenerator 가 구현하는지 확인한다.
 var _ Generator = (*GeminiGenerator)(nil)
-
-// 컴파일 검증: Generate 시그니처 확인.
-var _ = func(g *GeminiGenerator) {
-	var _ func(context.Context, []NewsItem) (DigestResult, error) = g.Generate
-}
