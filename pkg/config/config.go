@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -26,6 +27,12 @@ type Config struct {
 	NotionItemsDBID      string
 	NotionHomeURL        string // 집 정리 페이지 링크(선택, 사용자에게 보여줄 용도)
 	NotionMapPageID      string // 자동 렌더링할 "우리집 지도" 페이지 ID(선택)
+
+	TodoistAPIToken        string
+	TodoistBriefingChannel string
+	TodoistMorning         string // "HH:MM"
+	TodoistEvening         string // "HH:MM"
+	TodoistTZ              string
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -47,6 +54,12 @@ func New() (Config, error) {
 		NotionItemsDBID:      os.Getenv("NOTION_ITEMS_DB_ID"),
 		NotionHomeURL:        os.Getenv("NOTION_HOME_URL"),
 		NotionMapPageID:      os.Getenv("NOTION_MAP_PAGE_ID"),
+
+		TodoistAPIToken:        os.Getenv("TODOIST_API_TOKEN"),
+		TodoistBriefingChannel: os.Getenv("TODOIST_BRIEFING_CHANNEL"),
+		TodoistMorning:         getenv("TODOIST_MORNING_TIME", "08:00"),
+		TodoistEvening:         getenv("TODOIST_EVENING_TIME", "21:00"),
+		TodoistTZ:              getenv("TODOIST_BRIEFING_TZ", "Asia/Seoul"),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -88,4 +101,21 @@ func expandHome(p string) string {
 		}
 	}
 	return p
+}
+
+// ParseHHMM 은 "HH:MM" 문자열을 시·분으로 파싱한다.
+func ParseHHMM(s string) (hour, min int, err error) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("시각 형식이 HH:MM 이 아님: %q", s)
+	}
+	h, err := strconv.Atoi(parts[0])
+	if err != nil || h < 0 || h > 23 {
+		return 0, 0, fmt.Errorf("시(hour) 가 잘못됨: %q", s)
+	}
+	m, err := strconv.Atoi(parts[1])
+	if err != nil || m < 0 || m > 59 {
+		return 0, 0, fmt.Errorf("분(min) 이 잘못됨: %q", s)
+	}
+	return h, m, nil
 }

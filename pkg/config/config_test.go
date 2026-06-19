@@ -111,3 +111,34 @@ func TestNew_knowledgeRepoPathOverrideExpandsTilde(t *testing.T) {
 		t.Fatalf("~ 확장 실패: %q", cfg.KnowledgeRepoPath)
 	}
 }
+
+func TestParseHHMM(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		in      string
+		wantH   int
+		wantM   int
+		wantErr bool
+	}{
+		{"정상", "08:30", 8, 30, false},
+		{"자정", "00:00", 0, 0, false},
+		{"23시59분", "23:59", 23, 59, false},
+		{"시간초과", "24:00", 0, 0, true},
+		{"분초과", "08:60", 0, 0, true},
+		{"형식오류", "8시", 0, 0, true},
+		{"빈값", "", 0, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h, m, err := ParseHHMM(tt.in)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err=%v, wantErr=%v", err, tt.wantErr)
+			}
+			if !tt.wantErr && (h != tt.wantH || m != tt.wantM) {
+				t.Fatalf("got %d:%d, want %d:%d", h, m, tt.wantH, tt.wantM)
+			}
+		})
+	}
+}
