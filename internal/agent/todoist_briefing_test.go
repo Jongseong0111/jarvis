@@ -34,7 +34,7 @@ func TestMorningBriefing_emptySendsNothingNote(t *testing.T) {
 	f := &fakeTodoist{tasks: nil}
 	s := &capSender{}
 	NewMorningBriefing(f, s, "C1")(context.Background())
-	if len(s.sent) != 1 || !strings.Contains(s.sent[0].Text, "할일이 없어") || !strings.Contains(s.sent[0].Text, "좋은 하루") {
+	if len(s.sent) != 1 || !strings.Contains(s.sent[0].Text, "없습니다") || !strings.Contains(s.sent[0].Text, "좋은 하루") {
 		t.Fatalf("아침은 빈 날도 안내 전송: %+v", s.sent)
 	}
 }

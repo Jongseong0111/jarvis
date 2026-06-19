@@ -44,7 +44,7 @@ func (t todoistTools) listTodos() Tool {
 				return "", err
 			}
 			if len(tasks) == 0 {
-				return "할일이 없어.", nil
+				return "할 일이 없습니다. 🎉", nil
 			}
 			return formatTaskLines(tasks), nil
 		},
@@ -65,16 +65,16 @@ func (t todoistTools) addTodo() Tool {
 		Run: func(ctx context.Context, args map[string]any) (string, error) {
 			content := strings.TrimSpace(strArg(args, "content"))
 			if content == "" {
-				return "", fmt.Errorf("할일 내용이 필요해")
+				return "", fmt.Errorf("할 일 내용을 알려주세요.")
 			}
 			task, err := t.port.AddTask(ctx, content, strArg(args, "due"), strArg(args, "project"))
 			if err != nil {
 				return "", err
 			}
 			if task.Due != "" {
-				return fmt.Sprintf("추가했어: %s (%s)", task.Content, task.Due), nil
+				return fmt.Sprintf("✅ '%s' 추가했습니다. (마감: %s)", task.Content, task.Due), nil
 			}
-			return "추가했어: " + task.Content, nil
+			return "✅ '" + task.Content + "' 추가했습니다.", nil
 		},
 	}
 }
@@ -96,7 +96,7 @@ func (t todoistTools) completeTodo() Tool {
 			if err := t.port.CompleteTask(ctx, task.ID); err != nil {
 				return "", err
 			}
-			return "완료했어: " + task.Content, nil
+			return "☑️ '" + task.Content + "' 완료 처리했습니다.", nil
 		},
 	}
 }
@@ -116,7 +116,7 @@ func (t todoistTools) updateTodo() Tool {
 			content := strings.TrimSpace(strArg(args, "content"))
 			due := strings.TrimSpace(strArg(args, "due"))
 			if content == "" && due == "" {
-				return "", fmt.Errorf("뭘 바꿀지 알려줘(내용/마감)")
+				return "", fmt.Errorf("무엇을 바꿀지 알려주세요(내용 또는 마감).")
 			}
 			task, err := t.resolveTask(ctx, strArg(args, "query"))
 			if err != nil {
@@ -126,9 +126,9 @@ func (t todoistTools) updateTodo() Tool {
 				return "", err
 			}
 			if content != "" {
-				return "수정했어: " + content, nil
+				return "✏️ '" + content + "'(으)로 수정했습니다.", nil
 			}
-			return "수정했어: " + task.Content + " (마감: " + due + ")", nil
+			return "✏️ '" + task.Content + "' 마감을 '" + due + "'(으)로 변경했습니다.", nil
 		},
 	}
 }
@@ -150,7 +150,7 @@ func (t todoistTools) deleteTodo() Tool {
 			}
 			return domain.ChangeProposal{
 				Op:      "delete_todo",
-				Summary: "할일 삭제\n" + task.Content,
+				Summary: "🗑️ 다음 할 일을 삭제할까요?\n• " + task.Content,
 				Fields:  map[string]string{"task_id": task.ID, "content": task.Content},
 			}, nil
 		},
@@ -161,7 +161,7 @@ func (t todoistTools) deleteTodo() Tool {
 func (t todoistTools) resolveTask(ctx context.Context, query string) (todoist.Task, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return todoist.Task{}, fmt.Errorf("어떤 할일인지 알려줘")
+		return todoist.Task{}, fmt.Errorf("어떤 할 일인지 알려주세요.")
 	}
 	tasks, err := t.port.ListTasks(ctx, "")
 	if err != nil {
@@ -175,7 +175,7 @@ func (t todoistTools) resolveTask(ctx context.Context, query string) (todoist.Ta
 	}
 	switch len(matches) {
 	case 0:
-		return todoist.Task{}, fmt.Errorf("'%s'에 해당하는 할일을 못 찾았어.", query)
+		return todoist.Task{}, fmt.Errorf("'%s'에 해당하는 할 일을 찾지 못했습니다.", query)
 	case 1:
 		return matches[0], nil
 	default:
@@ -183,7 +183,7 @@ func (t todoistTools) resolveTask(ctx context.Context, query string) (todoist.Ta
 		for _, m := range matches {
 			names = append(names, m.Content)
 		}
-		return todoist.Task{}, fmt.Errorf("'%s'에 해당하는 게 여러 개야: %s. 더 정확히 알려줄래?", query, strings.Join(names, ", "))
+		return todoist.Task{}, fmt.Errorf("'%s'에 해당하는 할 일이 여러 개예요: %s. 더 정확히 알려주세요.", query, strings.Join(names, ", "))
 	}
 }
 
