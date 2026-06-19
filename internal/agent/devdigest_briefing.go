@@ -33,12 +33,16 @@ func NewDevDigestBriefing(fetcher devdigest.Fetcher, generator devdigest.Generat
 func formatDigest(r devdigest.DigestResult) string {
 	var sb strings.Builder
 
-	sb.WriteString("📰 *오늘의 개발 소식*\n")
-	for _, n := range r.News {
-		sb.WriteString(fmt.Sprintf("• <%s|%s> — %s\n", n.URL, n.Title, n.Summary))
+	// 뉴스가 있을 때만 개발 소식 섹션을 출력한다 (0개면 공부주제만 전송).
+	if len(r.News) > 0 {
+		sb.WriteString("📰 *오늘의 개발 소식*\n")
+		for _, n := range r.News {
+			sb.WriteString(fmt.Sprintf("• <%s|%s> — %s\n", n.URL, n.Title, n.Summary))
+		}
+		sb.WriteString("\n")
 	}
 
-	sb.WriteString(fmt.Sprintf("\n📚 *오늘의 공부 주제*  _(도메인: %s)_\n", r.Domain))
+	sb.WriteString(fmt.Sprintf("📚 *오늘의 공부 주제*  _(도메인: %s)_\n", r.Domain))
 	for _, topic := range r.Topics {
 		sb.WriteString("• " + topic + "\n")
 	}

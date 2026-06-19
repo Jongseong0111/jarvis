@@ -84,3 +84,30 @@ func TestNewDevDigestBriefing_generateFailSilent(t *testing.T) {
 		t.Fatalf("generate 실패 시 무음 기대: %+v", sender.sent)
 	}
 }
+
+func TestNewDevDigestBriefing_emptyNewsOnlyTopics(t *testing.T) {
+	t.Parallel()
+	// 뉴스가 없을 때 개발 소식 헤더는 생략하고 공부 주제만 전송되어야 한다.
+	fetcher := &fakeFetcher{}
+	generator := &fakeGenerator{result: devdigest.DigestResult{
+		News:   nil,
+		Domain: "언어",
+		Topics: []string{"언어 → Go → goroutine 스케줄러"},
+	}}
+	sender := &capSender{}
+	NewDevDigestBriefing(fetcher, generator, sender, "C4")(context.Background())
+
+	if len(sender.sent) != 1 {
+		t.Fatalf("메시지 1건 기대: %+v", sender.sent)
+	}
+	text := sender.sent[0].Text
+	if strings.Contains(text, "개발 소식") {
+		t.Fatalf("뉴스 0개일 때 개발 소식 헤더 없어야 함: %q", text)
+	}
+	if !strings.Contains(text, "공부 주제") {
+		t.Fatalf("공부 주제 헤더 있어야 함: %q", text)
+	}
+	if !strings.Contains(text, "goroutine") {
+		t.Fatalf("주제 내용 있어야 함: %q", text)
+	}
+}
