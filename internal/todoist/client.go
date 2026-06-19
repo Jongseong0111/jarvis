@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const defaultBase = "https://api.todoist.com/rest/v2"
+const defaultBase = "https://api.todoist.com/api/v1"
 
 // Client 는 Todoist REST 클라이언트다.
 type Client struct {
@@ -87,18 +87,27 @@ func (c *Client) do(ctx context.Context, method, path string, reqBody, respBody 
 	return nil
 }
 
-// ListTasks 는 필터(예: "today | overdue")에 맞는 할일을 조회한다.
+// taskList 는 v1 목록 응답 래퍼다({"results":[...],"next_cursor":...}).
+type taskList struct {
+	Results    []apiTask `json:"results"`
+	NextCursor *string   `json:"next_cursor"`
+}
+
+// ListTasks 는 할일을 조회한다. filter 가 있으면 Todoist 필터 문법(예: "today | overdue")으로,
+// 없으면 전체 활성 할일을 가져온다.
+// 주의: v1 은 커서 페이지네이션이지만 개인 규모(수십 건)라 첫 페이지만 읽는다(next_cursor 미순회).
 func (c *Client) ListTasks(ctx context.Context, filter string) ([]Task, error) {
 	path := "/tasks"
 	if filter != "" {
-		path += "?filter=" + url.QueryEscape(filter)
+		// v1 에선 필터 쿼리가 별도 엔드포인트다(/tasks 의 파라미터로는 안 먹음).
+		path = "/tasks/filter?query=" + url.QueryEscape(filter)
 	}
-	var raw []apiTask
+	var raw taskList
 	if err := c.do(ctx, http.MethodGet, path, nil, &raw); err != nil {
 		return nil, err
 	}
-	tasks := make([]Task, len(raw))
-	for i, a := range raw {
+	tasks := make([]Task, len(raw.Results))
+	for i, a := range raw.Results {
 		tasks[i] = a.toTask()
 	}
 	return tasks, nil
