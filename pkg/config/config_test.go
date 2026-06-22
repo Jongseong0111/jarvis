@@ -125,6 +125,19 @@ func TestUsageLogPathDefault(t *testing.T) {
 	}
 }
 
+func TestCalendarConfigDefault(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("GOOGLE_CALENDAR_ID", "")            // godotenv 주입 차단(빈→기본)
+	t.Setenv("GOOGLE_CALENDAR_REFRESH_TOKEN", "") // 차단
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cfg.GoogleCalendarID != "primary" {
+		t.Fatalf("GoogleCalendarID = %q, want primary", cfg.GoogleCalendarID)
+	}
+}
+
 func TestParseHHMM(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

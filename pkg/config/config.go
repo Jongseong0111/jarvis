@@ -36,7 +36,13 @@ type Config struct {
 
 	DigestTime    string   // "HH:MM", 기본 "09:00"
 	DigestRSSURLs []string // 추가 RSS 피드 URL 목록
-	UsageLogPath  string   // LLM 비용 기록 JSONL 경로
+
+	UsageLogPath string // LLM 비용 기록 JSONL 경로
+
+	GoogleOAuthClientID        string // Google Calendar OAuth 클라이언트 ID
+	GoogleOAuthClientSecret    string // Google Calendar OAuth 클라이언트 시크릿
+	GoogleCalendarRefreshToken string // Google Calendar 리프레시 토큰
+	GoogleCalendarID           string // Google Calendar ID (기본 "primary")
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -67,7 +73,13 @@ func New() (Config, error) {
 
 		DigestTime:    getenv("DIGEST_TIME", "09:00"),
 		DigestRSSURLs: parseCommaList(os.Getenv("DIGEST_RSS_URLS")),
-		UsageLogPath:  expandHome(getenv("USAGE_LOG_PATH", "~/.jarvis/usage.jsonl")),
+
+		UsageLogPath: expandHome(getenv("USAGE_LOG_PATH", "~/.jarvis/usage.jsonl")),
+
+		GoogleOAuthClientID:        os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
+		GoogleOAuthClientSecret:    os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+		GoogleCalendarRefreshToken: os.Getenv("GOOGLE_CALENDAR_REFRESH_TOKEN"),
+		GoogleCalendarID:           getenv("GOOGLE_CALENDAR_ID", "primary"),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
