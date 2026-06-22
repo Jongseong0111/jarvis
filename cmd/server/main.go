@@ -75,6 +75,10 @@ func main() {
 	}
 	tools = append(tools, agent.IngestTools(ingestPort)...)
 
+	// 공부 주제 추천 도구(대화형 재요청). 읽기형이라 항상 등록.
+	studyGen := devdigest.NewGenerator(geminiClient)
+	tools = append(tools, agent.StudyTools(studyGen)...)
+
 	// 변경안 적용기: 기본은 집정리, delete_todo 는 Todoist 로 분기
 	var applier domain.ProposalApplier = agent.NewHomeApplier(home, renderer)
 
