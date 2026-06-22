@@ -114,13 +114,8 @@ func TestNew_knowledgeRepoPathOverrideExpandsTilde(t *testing.T) {
 }
 
 func TestUsageLogPathDefault(t *testing.T) {
-	t.Setenv("SLACK_BOT_TOKEN", "x")
-	t.Setenv("SLACK_APP_TOKEN", "x")
-	t.Setenv("GEMINI_API_KEY", "x")
-	t.Setenv("NOTION_API_KEY", "x")
-	t.Setenv("NOTION_LOCATIONS_DB_ID", "x")
-	t.Setenv("NOTION_CATEGORIES_DB_ID", "x")
-	t.Setenv("NOTION_ITEMS_DB_ID", "x")
+	setRequiredEnv(t)
+	t.Setenv("USAGE_LOG_PATH", "") // godotenv.Load 가 config/.env 값을 주입하는 것 차단
 	cfg, err := New()
 	if err != nil {
 		t.Fatalf("New: %v", err)
