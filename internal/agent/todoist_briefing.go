@@ -25,6 +25,9 @@ func NewMorningBriefing(port TodoistPort, cal CalendarPort, sender domain.Messag
 		tasks, err := port.ListTasks(ctx, "today | overdue")
 		if err != nil {
 			log.FromContext(ctx).Error("아침 브리핑 조회 실패", "error", err)
+			if len(sections) == 0 {
+				return // 할일 조회 실패 + 일정 없음 → 무음(원본 동작 보존)
+			}
 		} else if len(tasks) > 0 {
 			sections = append(sections, "☀️ *오늘 할 일과 밀린 일*\n"+formatTaskLines(tasks))
 		}
