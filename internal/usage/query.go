@@ -2,6 +2,7 @@ package usage
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -31,7 +32,7 @@ type Summary struct {
 func (r *Recorder) Query(from, to time.Time) (Summary, error) {
 	s := Summary{From: from, To: to}
 	r.mu.Lock()
-	f, err := os.Open(r.path)
+	data, err := os.ReadFile(r.path)
 	r.mu.Unlock()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -39,11 +40,10 @@ func (r *Recorder) Query(from, to time.Time) (Summary, error) {
 		}
 		return s, err
 	}
-	defer f.Close()
 
 	models := map[string]*Bucket{}
 	feats := map[string]*Bucket{}
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		var rec Record
