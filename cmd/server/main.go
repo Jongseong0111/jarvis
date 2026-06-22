@@ -146,7 +146,7 @@ func startBriefings(ctx context.Context, cfg config.Config, todoistClient agent.
 	}
 	sched := scheduler.New()
 	sched.Register(scheduler.Job{Name: "morning", Hour: mh, Min: mm, TZ: tz,
-		Fn: agent.NewMorningBriefing(todoistClient, sender, cfg.TodoistBriefingChannel)})
+		Fn: agent.NewMorningBriefing(todoistClient, nil, sender, cfg.TodoistBriefingChannel)})
 	sched.Register(scheduler.Job{Name: "evening", Hour: eh, Min: em, TZ: tz,
 		Fn: agent.NewEveningBriefing(todoistClient, sender, cfg.TodoistBriefingChannel)})
 
