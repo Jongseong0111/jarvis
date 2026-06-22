@@ -45,7 +45,7 @@ func main() {
 	switch *kind {
 	case "morning":
 		todoistClient := todoist.New(cfg.TodoistAPIToken)
-		agent.NewMorningBriefing(todoistClient, slackClient, ch)(ctx)
+		agent.NewMorningBriefing(todoistClient, nil, slackClient, ch)(ctx)
 	case "evening":
 		todoistClient := todoist.New(cfg.TodoistAPIToken)
 		agent.NewEveningBriefing(todoistClient, slackClient, ch)(ctx)

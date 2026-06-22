@@ -33,7 +33,7 @@ func TestMorningBriefing_emptySendsNothingNote(t *testing.T) {
 	t.Parallel()
 	f := &fakeTodoist{tasks: nil}
 	s := &capSender{}
-	NewMorningBriefing(f, s, "C1")(context.Background())
+	NewMorningBriefing(f, nil, s, "C1")(context.Background())
 	if len(s.sent) != 1 || !strings.Contains(s.sent[0].Text, "없습니다") || !strings.Contains(s.sent[0].Text, "좋은 하루") {
 		t.Fatalf("아침은 빈 날도 안내 전송: %+v", s.sent)
 	}
@@ -53,7 +53,7 @@ func TestMorningBriefing_nonEmptySends(t *testing.T) {
 	t.Parallel()
 	f := &fakeTodoist{tasks: []todoist.Task{{ID: "1", Content: "운동", Due: "오늘"}}}
 	s := &capSender{}
-	NewMorningBriefing(f, s, "C1")(context.Background())
+	NewMorningBriefing(f, nil, s, "C1")(context.Background())
 	if len(s.sent) != 1 {
 		t.Fatalf("메시지 1건 기대: %+v", s.sent)
 	}
