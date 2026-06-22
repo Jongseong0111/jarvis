@@ -40,6 +40,12 @@ func main() {
 			http.Error(w, "state 불일치", http.StatusBadRequest)
 			return
 		}
+		// OAuth 동의 거부 또는 code 미발급 체크
+		if r.URL.Query().Get("error") != "" || r.URL.Query().Get("code") == "" {
+			http.Error(w, "인증이 거부되었거나 코드가 없습니다.", http.StatusBadRequest)
+			codeCh <- ""
+			return
+		}
 		code := r.URL.Query().Get("code")
 		fmt.Fprintln(w, "인증 완료. 터미널로 돌아가세요.")
 		codeCh <- code
@@ -52,6 +58,10 @@ func main() {
 	fmt.Println(authURL)
 
 	code := <-codeCh
+	if code == "" {
+		_ = srv.Shutdown(context.Background())
+		log.Fatal("인증이 취소되었거나 실패했습니다. 다시 시도해주세요.")
+	}
 	_ = srv.Shutdown(context.Background())
 
 	tok, err := cfg.Exchange(context.Background(), code)
