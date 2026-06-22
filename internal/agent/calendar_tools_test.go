@@ -107,20 +107,22 @@ func TestDeleteEventTool_Proposes(t *testing.T) {
 
 func TestEventRange(t *testing.T) {
 	t.Parallel()
+	seoul := seoulLoc()
+	// 2026-06-22 14:00 UTC = 2026-06-22 23:00 KST → today 는 6월 22일(KST)
 	now := time.Date(2026, 6, 22, 14, 0, 0, 0, time.UTC)
 	min, max := eventRange(now, "today")
 	if min.Day() != 22 || max.Sub(min) != 24*time.Hour {
 		t.Fatalf("today 범위 오류: %v ~ %v", min, max)
 	}
 	_, wmax := eventRange(now, "week")
-	if wmax.Sub(now) < 6*24*time.Hour {
-		t.Fatalf("week 범위가 너무 짧음: %v", wmax.Sub(now))
+	if wmax.Sub(min) != 7*24*time.Hour {
+		t.Fatalf("week 범위가 7일 아님: %v", wmax.Sub(min))
 	}
 
-	// tomorrow: 2026-06-23 00:00:00부터 2026-06-24 00:00:00까지 (24h)
+	// tomorrow: KST 기준 2026-06-23 00:00:00 KST 부터 24h
 	tmin, tmax := eventRange(now, "tomorrow")
-	expectedTmin := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
-	if tmin != expectedTmin {
+	expectedTmin := time.Date(2026, 6, 23, 0, 0, 0, 0, seoul)
+	if !tmin.Equal(expectedTmin) {
 		t.Fatalf("tomorrow min 오류: got %v, want %v", tmin, expectedTmin)
 	}
 	if tmax.Sub(tmin) != 24*time.Hour {
@@ -131,5 +133,13 @@ func TestEventRange(t *testing.T) {
 	mmin, mmax := eventRange(now, "month")
 	if mmax.Sub(mmin) != 30*24*time.Hour {
 		t.Fatalf("month 범위가 30일 아님: %v", mmax.Sub(mmin))
+	}
+
+	// 호스트 TZ 독립성: 2026-06-22 16:00 UTC = 2026-06-23 01:00 KST
+	// → today 범위의 시작이 KST 기준 6월 23일이어야 한다.
+	nowLate := time.Date(2026, 6, 22, 16, 0, 0, 0, time.UTC)
+	lmin, _ := eventRange(nowLate, "today")
+	if lmin.In(seoul).Day() != 23 || lmin.In(seoul).Month() != 6 {
+		t.Fatalf("KST 독립성 오류: UTC 16:00 → KST 다음날 기대, got %v", lmin.In(seoul))
 	}
 }
