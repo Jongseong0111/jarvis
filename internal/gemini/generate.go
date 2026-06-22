@@ -35,6 +35,7 @@ func (c *Client) GenerateText(ctx context.Context, system, user string) (string,
 	if err != nil {
 		return "", fmt.Errorf("gemini 생성 실패: %w", err)
 	}
+	c.record(ctx, resp, "text")
 	out := strings.TrimSpace(resp.Text())
 	if out == "" {
 		return "", fmt.Errorf("gemini 빈 응답")

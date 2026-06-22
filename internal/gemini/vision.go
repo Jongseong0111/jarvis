@@ -58,6 +58,7 @@ func (c *Client) ExtractItems(ctx context.Context, images []domain.Image) ([]str
 	if err != nil {
 		return nil, fmt.Errorf("gemini 비전 생성 실패: %w", err)
 	}
+	c.record(ctx, resp, "vision")
 
 	var names []string
 	if err := json.Unmarshal([]byte(resp.Text()), &names); err != nil {

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"google.golang.org/genai"
+
+	"github.com/Jongseong0111/jarvis/internal/usage"
 )
 
 // DefaultModel 은 model 미지정 시 사용하는 기본 모델이다.
@@ -19,6 +21,7 @@ const requestTimeout = 30 * time.Second
 type Client struct {
 	apiKey string
 	model  string
+	sink   UsageSink
 }
 
 // New 는 Client 를 생성한다. model 이 비면 기본 모델을 쓴다.
@@ -58,5 +61,27 @@ func (c *Client) GenerateWithTools(ctx context.Context, contents []*genai.Conten
 	if err != nil {
 		return nil, fmt.Errorf("gemini 생성 실패: %w", err)
 	}
+	c.record(ctx, resp, "agent")
 	return resp, nil
+}
+
+// UsageSink 는 Gemini 호출 비용을 기록하는 대상이다(usage.Recorder 가 구현).
+type UsageSink interface {
+	LogGemini(feature, model string, inputTk, outputTk int)
+}
+
+// SetUsageSink 는 비용 기록 sink 를 주입한다(nil 이면 기록 안 함).
+func (c *Client) SetUsageSink(s UsageSink) { c.sink = s }
+
+// record 는 응답의 토큰 사용량을 sink 에 기록한다. feature 는 ctx 값 우선, 없으면 defaultFeature.
+func (c *Client) record(ctx context.Context, resp *genai.GenerateContentResponse, defaultFeature string) {
+	if c.sink == nil || resp == nil || resp.UsageMetadata == nil {
+		return
+	}
+	feature := usage.FeatureFromContext(ctx)
+	if feature == "" {
+		feature = defaultFeature
+	}
+	m := resp.UsageMetadata
+	c.sink.LogGemini(feature, c.model, int(m.PromptTokenCount), int(m.CandidatesTokenCount))
 }
