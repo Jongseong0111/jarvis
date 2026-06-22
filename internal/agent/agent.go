@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 
@@ -70,6 +71,7 @@ type Agent struct {
 	tools  map[string]Tool
 	decls  []*genai.Tool
 	system string
+	now    func() time.Time
 	mem    *memory
 }
 
@@ -78,7 +80,23 @@ func New(gen generator, vision VisionExtractor, tools []Tool, system string) Age
 	if system == "" {
 		system = DefaultSystemPrompt
 	}
-	return Agent{gen: gen, vision: vision, tools: toolMap(tools), decls: toolDecls(tools), system: system, mem: newMemory()}
+	return Agent{gen: gen, vision: vision, tools: toolMap(tools), decls: toolDecls(tools), system: system, now: time.Now, mem: newMemory()}
+}
+
+// CalendarSystemHint 는 캘린더 기능이 켜졌을 때 시스템 프롬프트에 덧붙이는 지시문이다.
+const CalendarSystemHint = `
+- 일정/캘린더 조회·추가·삭제·검색은 캘린더 도구(list_events/add_event/search_events/delete_event)를 쓴다. add_event 의 start/end 는 위 '현재 시각'을 기준으로 상대 표현을 RFC3339(예: 2026-06-29T15:00:00+09:00)나 종일이면 YYYY-MM-DD 로 변환해 넣는다.
+- "급한 일/급한 거"를 물으면 캘린더(오늘~내일)와 할일(밀린·오늘·내일)을 모두 확인해 합쳐서 답한다.
+- 일정 삭제는 delete_event 로 변경안을 만들어 승인 버튼을 거친다.`
+
+// datedSystem 은 기본 시스템 프롬프트에 현재 시각(Asia/Seoul)을 덧붙인다.
+// 서버가 장시간 떠 있어도 메시지마다 최신 날짜가 들어가도록 호출 시점에 계산한다.
+func (a Agent) datedSystem() string {
+	t := a.now()
+	if loc, err := time.LoadLocation("Asia/Seoul"); err == nil {
+		t = t.In(loc)
+	}
+	return a.system + "\n\n[현재 시각: " + t.Format("2006-01-02 (Mon) 15:04") + " Asia/Seoul. 상대적 날짜·시간 표현은 이 시각 기준으로 해석한다.]"
 }
 
 // Route 는 메시지를 에이전트 루프로 처리한다(잡담→텍스트, 작업→도구/변경안).
@@ -100,9 +118,10 @@ func (a Agent) Route(ctx context.Context, in domain.IncomingMessage) (domain.Rep
 
 	contents := append(a.mem.get(in.ChannelID), genai.Text(in.Text)...)
 	lastResult := "" // 마지막 읽기 도구 결과(모델이 빈 응답일 때 fallback)
+	system := a.datedSystem()
 
 	for turn := 0; turn < maxTurns; turn++ {
-		resp, err := a.gen.GenerateWithTools(ctx, contents, a.decls, a.system)
+		resp, err := a.gen.GenerateWithTools(ctx, contents, a.decls, system)
 		if err != nil {
 			return domain.Reply{}, fmt.Errorf("agent 생성 실패: %w", err)
 		}
