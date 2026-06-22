@@ -21,9 +21,10 @@ const (
 
 // NewsItem 은 뉴스 피드에서 가져온 기사 하나다.
 type NewsItem struct {
-	Title string
-	URL   string
-	Desc  string
+	Title  string
+	URL    string
+	Desc   string
+	Source string // 출처 라벨(예: "GeekNews", "HN", "RSS")
 }
 
 // Fetcher 는 뉴스 아이템을 가져오는 인터페이스다.
@@ -70,13 +71,18 @@ func (f *MultiFetcher) Fetch(ctx context.Context) ([]NewsItem, error) {
 		items = append(items, got...)
 	}
 
-	for _, u := range f.rssURLs {
+	// rssURLs[0] 은 GeekNews(NewFetcher 가 맨 앞에 둠), 나머지는 일반 RSS 로 라벨링한다.
+	for i, u := range f.rssURLs {
+		source := "RSS"
+		if i == 0 {
+			source = "GeekNews"
+		}
 		wg.Add(1)
-		go func(url string) {
+		go func(url, src string) {
 			defer wg.Done()
-			got, err := f.fetchRSS(ctx, url)
+			got, err := f.fetchRSS(ctx, url, src)
 			collect(got, err, url)
-		}(u)
+		}(u, source)
 	}
 
 	wg.Add(1)
@@ -102,7 +108,7 @@ type rssXML struct {
 	} `xml:"channel>item"`
 }
 
-func (f *MultiFetcher) fetchRSS(ctx context.Context, url string) ([]NewsItem, error) {
+func (f *MultiFetcher) fetchRSS(ctx context.Context, url, source string) ([]NewsItem, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -123,7 +129,7 @@ func (f *MultiFetcher) fetchRSS(ctx context.Context, url string) ([]NewsItem, er
 		if i >= maxRSSItemsPerFeed {
 			break
 		}
-		out = append(out, NewsItem{Title: it.Title, URL: it.Link, Desc: it.Description})
+		out = append(out, NewsItem{Title: it.Title, URL: it.Link, Desc: it.Description, Source: source})
 	}
 	return out, nil
 }
@@ -194,5 +200,5 @@ func (f *MultiFetcher) fetchHNItem(ctx context.Context, id int) (*NewsItem, erro
 	if it.Type != "story" || it.URL == "" {
 		return nil, nil // 링크 없는 Ask HN 등 스킵
 	}
-	return &NewsItem{Title: it.Title, URL: it.URL}, nil
+	return &NewsItem{Title: it.Title, URL: it.URL, Source: "HN"}, nil
 }
