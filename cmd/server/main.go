@@ -14,6 +14,7 @@ import (
 	"github.com/Jongseong0111/jarvis/internal/agent"
 	"github.com/Jongseong0111/jarvis/internal/claudecode"
 	"github.com/Jongseong0111/jarvis/internal/devdigest"
+	"github.com/Jongseong0111/jarvis/internal/gcal"
 	"github.com/Jongseong0111/jarvis/internal/gemini"
 	"github.com/Jongseong0111/jarvis/internal/knowledge"
 	"github.com/Jongseong0111/jarvis/internal/notion"
@@ -87,28 +88,51 @@ func main() {
 	studyGen := devdigest.NewGenerator(geminiClient)
 	tools = append(tools, agent.StudyTools(studyGen)...)
 
+	// 캘린더 클라이언트(설정 있을 때만 활성)
+	var calPort agent.CalendarPort
+	if cfg.GoogleCalendarRefreshToken != "" {
+		cal, err := gcal.New(ctx, cfg.GoogleOAuthClientID, cfg.GoogleOAuthClientSecret, cfg.GoogleCalendarRefreshToken, cfg.GoogleCalendarID)
+		if err != nil {
+			logger.Error("캘린더 초기화 실패 — 캘린더 기능 비활성", "error", err)
+		} else {
+			calPort = cal
+			tools = append(tools, agent.CalendarTools(cal)...)
+		}
+	}
+
 	// 비용 조회 도구
 	tools = append(tools, agent.UsageTools(rec)...)
 
-	// 변경안 적용기: 기본은 집정리, delete_todo 는 Todoist 로 분기
+	// 변경안 적용기: 기본은 집정리; delete_todo/delete_event 는 각각 분기
 	var applier domain.ProposalApplier = agent.NewHomeApplier(home, renderer)
+	byOp := map[string]domain.ProposalApplier{}
 
+	var todoistClient agent.TodoistPort
 	if cfg.TodoistAPIToken != "" {
-		todoistClient := todoist.New(cfg.TodoistAPIToken)
+		todoistClient = todoist.New(cfg.TodoistAPIToken)
 		tools = append(tools, agent.TodoistTools(todoistClient)...)
-		applier = agent.NewDispatchApplier(
-			map[string]domain.ProposalApplier{"delete_todo": agent.NewTodoistApplier(todoistClient)},
-			applier,
-		)
-		if err := startBriefings(ctx, cfg, todoistClient, geminiClient, client, logger); err != nil {
+		byOp["delete_todo"] = agent.NewTodoistApplier(todoistClient)
+		if err := startBriefings(ctx, cfg, todoistClient, geminiClient, client, calPort, logger); err != nil {
 			logger.Error("브리핑 스케줄러 시작 실패", "error", err)
 			os.Exit(1)
 		}
 	} else {
 		logger.Info("Todoist 비활성(TODOIST_API_TOKEN 없음)")
 	}
+	if calPort != nil {
+		byOp["delete_event"] = agent.NewCalendarApplier(calPort)
+	}
+	if len(byOp) > 0 {
+		applier = agent.NewDispatchApplier(byOp, applier)
+	}
 
-	ag := agent.New(geminiClient, visionClient, tools, "")
+	// 시스템 프롬프트: 캘린더 활성 시 힌트 추가
+	sysPrompt := agent.DefaultSystemPrompt
+	if calPort != nil {
+		sysPrompt += agent.CalendarSystemHint
+	}
+
+	ag := agent.New(geminiClient, visionClient, tools, sysPrompt)
 	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client, cfg.KnowledgeRepoPath)
 	handler := slack.NewHandler(reviewRouter, client)
 
@@ -127,7 +151,7 @@ func main() {
 }
 
 // startBriefings 는 아침/저녁/다이제스트 브리핑을 스케줄러에 등록하고 백그라운드로 돌린다.
-func startBriefings(ctx context.Context, cfg config.Config, todoistClient agent.TodoistPort, geminiClient *gemini.Client, sender domain.MessageSender, logger *slog.Logger) error {
+func startBriefings(ctx context.Context, cfg config.Config, todoistClient agent.TodoistPort, geminiClient *gemini.Client, sender domain.MessageSender, calPort agent.CalendarPort, logger *slog.Logger) error {
 	if cfg.TodoistBriefingChannel == "" {
 		logger.Info("브리핑 채널 없음 — 스케줄러 미기동(도구만 활성)")
 		return nil
@@ -146,7 +170,7 @@ func startBriefings(ctx context.Context, cfg config.Config, todoistClient agent.
 	}
 	sched := scheduler.New()
 	sched.Register(scheduler.Job{Name: "morning", Hour: mh, Min: mm, TZ: tz,
-		Fn: agent.NewMorningBriefing(todoistClient, nil, sender, cfg.TodoistBriefingChannel)})
+		Fn: agent.NewMorningBriefing(todoistClient, calPort, sender, cfg.TodoistBriefingChannel)})
 	sched.Register(scheduler.Job{Name: "evening", Hour: eh, Min: em, TZ: tz,
 		Fn: agent.NewEveningBriefing(todoistClient, sender, cfg.TodoistBriefingChannel)})
 
