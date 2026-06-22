@@ -93,9 +93,11 @@ const CalendarSystemHint = `
 // 서버가 장시간 떠 있어도 메시지마다 최신 날짜가 들어가도록 호출 시점에 계산한다.
 func (a Agent) datedSystem() string {
 	t := a.now()
-	if loc, err := time.LoadLocation("Asia/Seoul"); err == nil {
-		t = t.In(loc)
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		loc = time.FixedZone("Asia/Seoul", 9*60*60) // tzdata 없는 환경 대비 고정 +09:00
 	}
+	t = t.In(loc)
 	return a.system + "\n\n[현재 시각: " + t.Format("2006-01-02 (Mon) 15:04") + " Asia/Seoul. 상대적 날짜·시간 표현은 이 시각 기준으로 해석한다.]"
 }
 
