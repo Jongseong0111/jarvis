@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,20 @@ import (
 	"github.com/Jongseong0111/jarvis/internal/gcal"
 	"github.com/Jongseong0111/jarvis/internal/todoist"
 )
+
+// errTodoist 는 ListTasks 가 항상 오류를 반환하는 테스트용 fake.
+// fakeTodoist 는 오류를 반환할 수 없으므로 별도 정의.
+type errTodoist struct{}
+
+func (e *errTodoist) ListTasks(_ context.Context, _ string) ([]todoist.Task, error) {
+	return nil, errors.New("todoist API 오류(테스트)")
+}
+func (e *errTodoist) AddTask(_ context.Context, _, _, _ string) (todoist.Task, error) {
+	return todoist.Task{}, nil
+}
+func (e *errTodoist) CompleteTask(_ context.Context, _ string) error { return nil }
+func (e *errTodoist) UpdateTask(_ context.Context, _, _, _ string) error { return nil }
+func (e *errTodoist) DeleteTask(_ context.Context, _ string) error { return nil }
 
 // capSender 는 todoist_briefing_test.go 에 정의돼 있다(같은 package agent).
 // fakeTodoist 는 todoist_tools_test.go 에 정의돼 있다(같은 package agent).
@@ -73,5 +88,18 @@ func TestMorningBriefing_NilCalendarWithTodos(t *testing.T) {
 	}
 	if !strings.Contains(sender.sent[0].Text, "운동") {
 		t.Fatalf("할일 브리핑 누락:\n%s", sender.sent[0].Text)
+	}
+}
+
+func TestMorningBriefing_ListTasksError_NoCalendar_Silent(t *testing.T) {
+	t.Parallel()
+	// 회귀 테스트: ListTasks 오류 + 일정 없음 → 무음(메시지 전송 없음)
+	// 이전 버전은 오류 시 "오늘 마감할 일이 없습니다" 를 전송해 오해를 줬다.
+	todo := &errTodoist{}
+	sender := &capSender{}
+	job := NewMorningBriefing(todo, nil, sender, "C1")
+	job(context.Background())
+	if len(sender.sent) != 0 {
+		t.Fatalf("오류 시 무음 기대, 그런데 메시지 전송됨: %+v", sender.sent)
 	}
 }
