@@ -6,17 +6,21 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	defaultGeekNewsRSS = "https://news.hada.io/rss"
+	defaultGeekNewsRSS = "https://news.hada.io/rss/news"
 	defaultHNTopURL    = "https://hacker-news.firebaseio.com/v0/topstories.json"
 	defaultHNItemBase  = "https://hacker-news.firebaseio.com/v0/item/%d.json"
 	maxHNFetch         = 30
 	maxRSSItemsPerFeed = 30
+	maxDescRunes       = 200 // 후보 설명 최대 길이(HTML 본문 절단)
 )
 
 // NewsItem 은 뉴스 피드에서 가져온 기사 하나다.
@@ -100,12 +104,24 @@ func (f *MultiFetcher) Fetch(ctx context.Context) ([]NewsItem, error) {
 	return items, nil
 }
 
-type rssXML struct {
-	Items []struct {
+// feedXML 은 RSS 2.0(channel>item)과 Atom(feed>entry) 양쪽을 함께 파싱한다.
+// GeekNews 는 Atom, 일반 RSS 는 channel>item 을 채운다.
+type feedXML struct {
+	RSSItems []struct {
 		Title       string `xml:"title"`
 		Link        string `xml:"link"`
 		Description string `xml:"description"`
 	} `xml:"channel>item"`
+	AtomEntries []struct {
+		Title string `xml:"title"`
+		Links []struct {
+			Href string `xml:"href,attr"`
+			Rel  string `xml:"rel,attr"`
+			Type string `xml:"type,attr"`
+		} `xml:"link"`
+		Summary string `xml:"summary"`
+		Content string `xml:"content"`
+	} `xml:"entry"`
 }
 
 func (f *MultiFetcher) fetchRSS(ctx context.Context, url, source string) ([]NewsItem, error) {
@@ -119,19 +135,62 @@ func (f *MultiFetcher) fetchRSS(ctx context.Context, url, source string) ([]News
 	}
 	defer resp.Body.Close()
 
-	var feed rssXML
+	var feed feedXML
 	if err := xml.NewDecoder(resp.Body).Decode(&feed); err != nil {
-		return nil, fmt.Errorf("RSS 파싱 실패: %w", err)
+		return nil, fmt.Errorf("피드 파싱 실패: %w", err)
 	}
 
 	var out []NewsItem
-	for i, it := range feed.Items {
-		if i >= maxRSSItemsPerFeed {
+	// RSS 2.0
+	for _, it := range feed.RSSItems {
+		if len(out) >= maxRSSItemsPerFeed {
 			break
 		}
-		out = append(out, NewsItem{Title: it.Title, URL: it.Link, Desc: it.Description, Source: source})
+		out = append(out, NewsItem{Title: it.Title, URL: it.Link, Desc: cleanDesc(it.Description), Source: source})
+	}
+	// Atom (GeekNews 등)
+	for _, e := range feed.AtomEntries {
+		if len(out) >= maxRSSItemsPerFeed {
+			break
+		}
+		desc := e.Summary
+		if strings.TrimSpace(desc) == "" {
+			desc = e.Content
+		}
+		out = append(out, NewsItem{Title: strings.TrimSpace(e.Title), URL: atomLink(e.Links), Desc: cleanDesc(desc), Source: source})
 	}
 	return out, nil
+}
+
+// atomLink 은 Atom entry 의 링크들 중 본문(text/html, rel=alternate) 링크를 고른다.
+func atomLink(links []struct {
+	Href string `xml:"href,attr"`
+	Rel  string `xml:"rel,attr"`
+	Type string `xml:"type,attr"`
+}) string {
+	for _, l := range links {
+		if l.Rel == "alternate" || l.Type == "text/html" {
+			return l.Href
+		}
+	}
+	if len(links) > 0 {
+		return links[0].Href
+	}
+	return ""
+}
+
+var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
+
+// cleanDesc 는 HTML 태그를 제거하고 공백을 정리한 뒤 maxDescRunes 로 절단한다.
+func cleanDesc(s string) string {
+	s = htmlTagRE.ReplaceAllString(s, " ")
+	s = html.UnescapeString(s)
+	s = strings.Join(strings.Fields(s), " ")
+	r := []rune(s)
+	if len(r) > maxDescRunes {
+		return string(r[:maxDescRunes]) + "…"
+	}
+	return s
 }
 
 func (f *MultiFetcher) fetchHN(ctx context.Context) ([]NewsItem, error) {

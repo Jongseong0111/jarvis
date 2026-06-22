@@ -43,22 +43,108 @@ func TestParseResponse_invalid(t *testing.T) {
 	}
 }
 
-func TestBuildPrompt_containsItems(t *testing.T) {
+func TestBuildPrompt_geekNewsInPoolWithInstruction(t *testing.T) {
 	t.Parallel()
 	items := []NewsItem{
-		{Title: "기사A", URL: "https://a.com", Desc: "설명A", Source: "GeekNews"},
+		{Title: "긱뉴스글", URL: "https://hada.io/1", Desc: "긱설명", Source: "GeekNews"},
+		{Title: "HN글", URL: "https://hn.com/2", Desc: "HN설명", Source: "HN"},
 	}
-	p := buildPrompt(items)
-	if !strings.Contains(p, "기사A") || !strings.Contains(p, "https://a.com") {
-		t.Fatalf("prompt=%q", p)
+	p := buildPrompt(items, true)
+	// GeekNews와 HN 모두 후보 풀에 라벨과 함께 남아야 한다.
+	if !strings.Contains(p, "[GeekNews]") || !strings.Contains(p, "긱뉴스글") {
+		t.Fatalf("GeekNews가 후보에 없음: %q", p)
 	}
-	// 출처 라벨이 후보 줄에 붙어야 한다.
-	if !strings.Contains(p, "[GeekNews]") {
-		t.Fatalf("출처 라벨 없음: %q", p)
+	if !strings.Contains(p, "[HN]") || !strings.Contains(p, "HN글") {
+		t.Fatalf("HN이 후보에 없음: %q", p)
 	}
-	// GeekNews 1-2개 포함 지시가 있어야 한다.
-	if !strings.Contains(p, "GeekNews") || !strings.Contains(p, "최소 1-2개") {
-		t.Fatalf("GeekNews 포함 지시 없음: %q", p)
+	// GeekNews 1~2개 + 다른 출처 혼합 지시가 있어야 한다.
+	if !strings.Contains(p, "1~2개") || !strings.Contains(p, "치우치지 마라") {
+		t.Fatalf("GeekNews 혼합 지시 없음: %q", p)
+	}
+}
+
+func TestBuildPrompt_noGeekNewsNoInstruction(t *testing.T) {
+	t.Parallel()
+	items := []NewsItem{{Title: "HN글", URL: "https://hn.com/2", Source: "HN"}}
+	p := buildPrompt(items, false)
+	if strings.Contains(p, "반드시 포함") {
+		t.Fatalf("GeekNews 없는데 포함 지시가 생김: %q", p)
+	}
+	if !strings.Contains(p, "HN글") {
+		t.Fatalf("HN 후보 없음: %q", p)
+	}
+}
+
+func TestGeekNewsItems(t *testing.T) {
+	t.Parallel()
+	items := []NewsItem{
+		{Title: "G1", URL: "u1", Source: "GeekNews"},
+		{Title: "H1", URL: "u2", Source: "HN"},
+		{Title: "G2", URL: "u3", Source: "GeekNews"},
+	}
+	got := geekNewsItems(items)
+	if len(got) != 2 || got[0].URL != "u1" || got[1].URL != "u3" {
+		t.Fatalf("GeekNews만 순서대로 추려야 함: %+v", got)
+	}
+}
+
+func TestBalanceNews_injectsWhenNonePresent(t *testing.T) {
+	t.Parallel()
+	items := []NewsItem{
+		{Title: "긱뉴스글", URL: "https://hada.io/1", Desc: "긱설명", Source: "GeekNews"},
+		{Title: "HN글", URL: "https://hn.com/2", Source: "HN"},
+	}
+	result := DigestResult{News: []NewsResult{{Title: "HN글", URL: "https://hn.com/2", Summary: "요약"}}}
+	out := balanceNews(result, items)
+	if len(out.News) != 2 {
+		t.Fatalf("주입 후 2건 기대: %+v", out.News)
+	}
+	if out.News[0].URL != "https://hada.io/1" || out.News[0].Summary != "긱설명" {
+		t.Fatalf("맨 앞에 GeekNews 주입 기대: %+v", out.News[0])
+	}
+}
+
+func TestBalanceNews_capsExcessGeekNews(t *testing.T) {
+	t.Parallel()
+	// 후보·결과 모두 GeekNews 4개 + HN 1개. maxGeekNews=2 로 잘려 총 3건이 되어야 한다.
+	items := []NewsItem{
+		{URL: "g1", Source: "GeekNews"}, {URL: "g2", Source: "GeekNews"},
+		{URL: "g3", Source: "GeekNews"}, {URL: "g4", Source: "GeekNews"},
+		{URL: "h1", Source: "HN"},
+	}
+	result := DigestResult{News: []NewsResult{
+		{URL: "g1"}, {URL: "g2"}, {URL: "g3"}, {URL: "g4"}, {URL: "h1"},
+	}}
+	out := balanceNews(result, items)
+	if len(out.News) != 3 {
+		t.Fatalf("GeekNews 2개 + HN 1개 = 3건 기대: %+v", out.News)
+	}
+	// 앞 2개 GeekNews(g1,g2)는 유지, g3·g4는 제거, HN은 유지.
+	if out.News[0].URL != "g1" || out.News[1].URL != "g2" || out.News[2].URL != "h1" {
+		t.Fatalf("초과 GeekNews 제거 실패: %+v", out.News)
+	}
+}
+
+func TestBalanceNews_keepsMixUnchanged(t *testing.T) {
+	t.Parallel()
+	// 이미 GeekNews 1 + HN 2 로 균형 잡힌 경우 그대로 둔다.
+	items := []NewsItem{
+		{URL: "g1", Source: "GeekNews"}, {URL: "h1", Source: "HN"}, {URL: "h2", Source: "HN"},
+	}
+	result := DigestResult{News: []NewsResult{{URL: "g1"}, {URL: "h1"}, {URL: "h2"}}}
+	out := balanceNews(result, items)
+	if len(out.News) != 3 || out.News[0].URL != "g1" {
+		t.Fatalf("균형 잡힌 결과는 그대로: %+v", out.News)
+	}
+}
+
+func TestBalanceNews_emptyGeekNoop(t *testing.T) {
+	t.Parallel()
+	items := []NewsItem{{URL: "h1", Source: "HN"}}
+	result := DigestResult{News: []NewsResult{{URL: "h1"}}}
+	out := balanceNews(result, items)
+	if len(out.News) != 1 {
+		t.Fatalf("GeekNews 후보 없으면 그대로: %+v", out.News)
 	}
 }
 
