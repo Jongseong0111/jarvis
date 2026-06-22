@@ -30,6 +30,12 @@ type DigestResult struct {
 	Topics []string
 }
 
+// TopicResult 는 공부 주제 생성 결과다(뉴스 없이 주제만).
+type TopicResult struct {
+	Domain string
+	Topics []string
+}
+
 // Generator 는 뉴스 아이템에서 다이제스트를 생성하는 인터페이스다.
 type Generator interface {
 	Generate(ctx context.Context, items []NewsItem) (DigestResult, error)
@@ -62,6 +68,38 @@ func (g *GeminiGenerator) Generate(ctx context.Context, items []NewsItem) (Diges
 		return DigestResult{}, err
 	}
 	return balanceNews(result, items), nil
+}
+
+// GenerateTopics 는 공부 주제만 생성한다(대화형 재요청용).
+// requestedDomain 이 비면 모델이 11개 도메인 중 하나를 선택하고,
+// 지정되면 그 도메인(또는 더 구체적인 세부 주제 힌트)으로 계층형 주제를 만든다.
+func (g *GeminiGenerator) GenerateTopics(ctx context.Context, requestedDomain string) (TopicResult, error) {
+	raw, err := g.client.GenerateText(ctx, systemPrompt, buildTopicPrompt(requestedDomain))
+	if err != nil {
+		return TopicResult{}, fmt.Errorf("gemini 공부주제 생성 실패: %w", err)
+	}
+	result, err := parseResponse(raw)
+	if err != nil {
+		return TopicResult{}, err
+	}
+	return TopicResult{Domain: result.Domain, Topics: result.Topics}, nil
+}
+
+// buildTopicPrompt 는 공부 주제 전용 프롬프트를 만든다.
+func buildTopicPrompt(requestedDomain string) string {
+	var sb strings.Builder
+	sb.WriteString("개발 공부 주제를 생성하라.\n")
+	if requestedDomain != "" {
+		sb.WriteString("- 도메인/주제: \"" + requestedDomain + "\" 에 대해 생성하라(더 구체적인 세부 주제여도 좋다).\n")
+		sb.WriteString("- domain 필드에는 위 주제의 큰 분류명을 넣어라.\n")
+	} else {
+		sb.WriteString("- 아래 도메인 중 하나를 선택: " + strings.Join(domains, " / ") + "\n")
+		sb.WriteString("- 인프라 선택 시 Kafka·RabbitMQ 같은 메시징 시스템도 포함 가능\n")
+	}
+	sb.WriteString("- 계층형 주제 3-5개: \"도메인 → 중분류 → 구체 개념\" 형식\n")
+	sb.WriteString("- 예: \"데이터베이스 → Vector DB → HNSW 인덱스 구조\"\n\n")
+	sb.WriteString("JSON: {\"domain\":\"...\",\"topics\":[\"...\"]}")
+	return sb.String()
 }
 
 // geekNewsItems 는 후보 중 GeekNews 출처 항목만 추린다(피드 순서 유지).

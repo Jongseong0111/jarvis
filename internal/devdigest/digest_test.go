@@ -148,5 +148,30 @@ func TestBalanceNews_emptyGeekNoop(t *testing.T) {
 	}
 }
 
+func TestBuildTopicPrompt_specificDomain(t *testing.T) {
+	t.Parallel()
+	p := buildTopicPrompt("운영체제")
+	if !strings.Contains(p, "운영체제") {
+		t.Fatalf("지정 도메인 미포함: %q", p)
+	}
+	// 계층형 형식 안내가 있어야 한다.
+	if !strings.Contains(p, "→") {
+		t.Fatalf("계층형 형식 안내 없음: %q", p)
+	}
+	// 출력 JSON 스키마 안내(domain, topics).
+	if !strings.Contains(p, "topics") || !strings.Contains(p, "domain") {
+		t.Fatalf("JSON 스키마 안내 없음: %q", p)
+	}
+}
+
+func TestBuildTopicPrompt_randomDomain(t *testing.T) {
+	t.Parallel()
+	p := buildTopicPrompt("")
+	// 미지정 시 11개 도메인 목록이 제시되어야 한다.
+	if !strings.Contains(p, "운영체제") || !strings.Contains(p, "데이터베이스") || !strings.Contains(p, "자료구조·알고리즘") {
+		t.Fatalf("도메인 목록 미포함: %q", p)
+	}
+}
+
 // 컴파일 검증: Generator 인터페이스를 GeminiGenerator 가 구현하는지 확인한다.
 var _ Generator = (*GeminiGenerator)(nil)
