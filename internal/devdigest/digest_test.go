@@ -46,11 +46,19 @@ func TestParseResponse_invalid(t *testing.T) {
 func TestBuildPrompt_containsItems(t *testing.T) {
 	t.Parallel()
 	items := []NewsItem{
-		{Title: "기사A", URL: "https://a.com", Desc: "설명A"},
+		{Title: "기사A", URL: "https://a.com", Desc: "설명A", Source: "GeekNews"},
 	}
 	p := buildPrompt(items)
 	if !strings.Contains(p, "기사A") || !strings.Contains(p, "https://a.com") {
 		t.Fatalf("prompt=%q", p)
+	}
+	// 출처 라벨이 후보 줄에 붙어야 한다.
+	if !strings.Contains(p, "[GeekNews]") {
+		t.Fatalf("출처 라벨 없음: %q", p)
+	}
+	// GeekNews 1-2개 포함 지시가 있어야 한다.
+	if !strings.Contains(p, "GeekNews") || !strings.Contains(p, "최소 1-2개") {
+		t.Fatalf("GeekNews 포함 지시 없음: %q", p)
 	}
 }
 

@@ -42,6 +42,10 @@ func TestFetcher_RSS(t *testing.T) {
 	if items[0].Title != "Go 1.25 출시" || items[0].URL != "https://go.dev/blog/go1.25" {
 		t.Fatalf("첫 아이템 불일치: %+v", items[0])
 	}
+	// rssURLs[0] 은 GeekNews 로 라벨링되어야 한다.
+	if items[0].Source != "GeekNews" {
+		t.Fatalf("Source=GeekNews 기대: %+v", items[0])
+	}
 }
 
 func TestFetcher_HN(t *testing.T) {
@@ -66,6 +70,9 @@ func TestFetcher_HN(t *testing.T) {
 	for _, it := range items {
 		if it.Title == "HN 기사" {
 			found = true
+			if it.Source != "HN" {
+				t.Fatalf("Source=HN 기대: %+v", it)
+			}
 		}
 	}
 	if !found {

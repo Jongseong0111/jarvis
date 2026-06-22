@@ -60,11 +60,16 @@ func buildPrompt(items []NewsItem) string {
 	var sb strings.Builder
 	sb.WriteString("[뉴스 후보 목록]\n")
 	for i, it := range items {
-		sb.WriteString(fmt.Sprintf("%d. %s | %s | %s\n", i+1, it.Title, it.URL, it.Desc))
+		source := it.Source
+		if source == "" {
+			source = "기타"
+		}
+		sb.WriteString(fmt.Sprintf("%d. [%s] %s | %s | %s\n", i+1, source, it.Title, it.URL, it.Desc))
 	}
 	sb.WriteString("\n[작업]\n")
 	sb.WriteString("1. 위 목록에서 개발자에게 가장 흥미로운 항목 3-5개를 골라라.\n")
 	sb.WriteString("   - 실제 기술 내용 우선 (채용/마케팅/이벤트 제외)\n")
+	sb.WriteString("   - [GeekNews] 출처 항목이 후보에 있으면 그중 최소 1-2개를 반드시 포함하라\n")
 	sb.WriteString("   - 각 항목: title(원문 유지), url(원문), summary(한국어 한줄 요약)\n\n")
 	sb.WriteString("2. 오늘의 개발 공부 주제를 생성하라.\n")
 	sb.WriteString("   - 아래 도메인 중 하나 선택: " + strings.Join(domains, " / ") + "\n")
