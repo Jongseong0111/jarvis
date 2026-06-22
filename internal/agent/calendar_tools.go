@@ -15,6 +15,14 @@ import (
 // calNow 는 캘린더 도구가 쓰는 현재 시각이다(테스트에서 교체).
 var calNow = time.Now
 
+// seoulLoc 는 Asia/Seoul 위치를 반환한다(tzdata 없으면 +09:00 고정).
+func seoulLoc() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Seoul"); err == nil {
+		return loc
+	}
+	return time.FixedZone("Asia/Seoul", 9*60*60)
+}
+
 // CalendarPort 는 캘린더 조작 능력이다(gcal.Client 가 구현).
 type CalendarPort interface {
 	ListEvents(ctx context.Context, timeMin, timeMax time.Time) ([]gcal.Event, error)
@@ -169,9 +177,11 @@ func (t calendarTools) resolveEvent(ctx context.Context, query string) (gcal.Eve
 }
 
 // eventRange 는 period 에 대한 [timeMin, timeMax) 를 now 기준으로 만든다.
+// 날짜 경계는 호스트 TZ 에 무관하게 항상 Asia/Seoul 자정 기준이다.
 func eventRange(now time.Time, period string) (timeMin, timeMax time.Time) {
+	now = now.In(seoulLoc())
 	y, m, d := now.Date()
-	start := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+	start := time.Date(y, m, d, 0, 0, 0, 0, seoulLoc())
 	switch period {
 	case "today":
 		return start, start.AddDate(0, 0, 1)
@@ -233,14 +243,9 @@ func formatEvents(evs []gcal.Event) string {
 }
 
 // formatEventLine 은 일정 1건을 한 줄로 만든다(Asia/Seoul 표기).
-// LoadLocation 실패 시 FixedZone(+09:00) 으로 폴백한다(UTC 폴백 금지 — agent.go 컨벤션).
+// tzdata 없는 환경에서도 seoulLoc() 이 +09:00 을 보장한다(UTC 폴백 금지 — agent.go 컨벤션).
 func formatEventLine(e gcal.Event) string {
-	loc, err := time.LoadLocation("Asia/Seoul")
-	if err != nil {
-		// tzdata 없는 환경에서도 +09:00 을 보장한다.
-		loc = time.FixedZone("Asia/Seoul", 9*60*60)
-	}
-	s := e.Start.In(loc)
+	s := e.Start.In(seoulLoc())
 	when := s.Format("1월 2일 (Mon) 15:04")
 	if e.AllDay {
 		when = s.Format("1월 2일") + " (종일)"

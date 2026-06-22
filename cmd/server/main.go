@@ -136,7 +136,7 @@ func main() {
 	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client, cfg.KnowledgeRepoPath)
 	handler := slack.NewHandler(reviewRouter, client)
 
-	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=applier(Todoist 활성 시 DispatchApplier, 아니면 HomeApplier), sender=client
+	// 버튼 승인 처리(변경안 적용 + 지도 갱신). applier=applier(Todoist/캘린더 활성 시 DispatchApplier, 아니면 HomeApplier), sender=client
 	client.SetInteractionHandler(slack.NewInteractionHandler(applier, client))
 
 	logger.Info("jarvis 시작", "env", cfg.Env)
