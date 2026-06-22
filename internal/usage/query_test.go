@@ -72,3 +72,17 @@ func TestRangeForPeriod(t *testing.T) {
 		}
 	}
 }
+
+func TestRangeForPeriod_WeekStartsMonday(t *testing.T) {
+	t.Parallel()
+	// 2026-06-24 는 수요일 → 그 주 월요일은 2026-06-22.
+	now := time.Date(2026, 6, 24, 10, 0, 0, 0, time.UTC)
+	from, to := RangeForPeriod(now, "week")
+	wantFrom := time.Date(2026, 6, 22, 0, 0, 0, 0, time.UTC)
+	if !from.Equal(wantFrom) {
+		t.Fatalf("week from = %v, want %v (월요일)", from, wantFrom)
+	}
+	if !to.Equal(now) {
+		t.Fatalf("week to = %v, want now %v", to, now)
+	}
+}
