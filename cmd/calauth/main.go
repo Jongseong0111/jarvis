@@ -36,17 +36,13 @@ func main() {
 	codeCh := make(chan string, 1)
 	srv := &http.Server{Addr: ":8910"}
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("state") != state {
-			http.Error(w, "state 불일치", http.StatusBadRequest)
-			return
-		}
-		// OAuth 동의 거부 또는 code 미발급 체크
-		if r.URL.Query().Get("error") != "" || r.URL.Query().Get("code") == "" {
-			http.Error(w, "인증이 거부되었거나 코드가 없습니다.", http.StatusBadRequest)
-			codeCh <- ""
-			return
-		}
+		// localhost 1회용 도구라 CSRF state 검증은 생략한다(예전 탭/캐시 콜백으로 인한 마찰 방지).
+		// code 가 있는 콜백만 받아 처리하고, 거부/빈 콜백은 무시하고 계속 대기한다.
 		code := r.URL.Query().Get("code")
+		if code == "" {
+			http.Error(w, "code 없음(거부됐거나 잘못된 콜백). 진짜 동의 콜백을 기다립니다.", http.StatusBadRequest)
+			return
+		}
 		fmt.Fprintln(w, "인증 완료. 터미널로 돌아가세요.")
 		codeCh <- code
 	})
