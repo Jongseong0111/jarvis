@@ -20,6 +20,7 @@ import (
 	"github.com/Jongseong0111/jarvis/internal/scheduler"
 	"github.com/Jongseong0111/jarvis/internal/slack"
 	"github.com/Jongseong0111/jarvis/internal/todoist"
+	"github.com/Jongseong0111/jarvis/internal/usage"
 	"github.com/Jongseong0111/jarvis/pkg/config"
 	"github.com/Jongseong0111/jarvis/pkg/log"
 )
@@ -66,6 +67,13 @@ func main() {
 
 	// Phase B: knowledge ingest — Claude Code 세션 다리
 	ccRunner := claudecode.New()
+
+	// usage Recorder: 세 LLM 클라이언트 모두 sink 연결
+	rec := usage.NewRecorder(cfg.UsageLogPath)
+	geminiClient.SetUsageSink(rec)
+	visionClient.SetUsageSink(rec)
+	ccRunner.SetUsageSink(rec)
+
 	reviewRegistry := agent.NewReviewSessionRegistry()
 	ingestPort := agent.IngestPort{
 		Runner:   ccRunner,
@@ -78,6 +86,9 @@ func main() {
 	// 공부 주제 추천 도구(대화형 재요청). 읽기형이라 항상 등록.
 	studyGen := devdigest.NewGenerator(geminiClient)
 	tools = append(tools, agent.StudyTools(studyGen)...)
+
+	// 비용 조회 도구
+	tools = append(tools, agent.UsageTools(rec)...)
 
 	// 변경안 적용기: 기본은 집정리, delete_todo 는 Todoist 로 분기
 	var applier domain.ProposalApplier = agent.NewHomeApplier(home, renderer)

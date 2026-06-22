@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/Jongseong0111/jarvis/internal/usage"
 )
 
 // summarizer 는 요약에 쓰는 텍스트 생성 능력이다(*gemini.Client 가 만족).
@@ -35,6 +37,7 @@ func (s Service) Summarize(ctx context.Context, url string) (string, string, err
 	if err != nil {
 		return "", "", err
 	}
+	ctx = usage.WithFeature(ctx, "knowledge")
 	summary, err := s.sum.GenerateText(ctx, summarySystem, strings.Join(conv.Messages, "\n"))
 	if err != nil {
 		return "", "", err

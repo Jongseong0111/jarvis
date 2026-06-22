@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Jongseong0111/jarvis/internal/gemini"
+	"github.com/Jongseong0111/jarvis/internal/usage"
 )
 
 // domains 는 공부 주제 도메인 목록이다. Gemini 가 매일 하나를 선택한다.
@@ -59,6 +60,7 @@ const maxGeekNews = 2
 // 모델이 치우치면 코드가 GeekNews 를 최대 maxGeekNews 로 자르고, 0개면 1개 주입한다.
 func (g *GeminiGenerator) Generate(ctx context.Context, items []NewsItem) (DigestResult, error) {
 	geek := geekNewsItems(items)
+	ctx = usage.WithFeature(ctx, "digest")
 	raw, err := g.client.GenerateText(ctx, systemPrompt, buildPrompt(items, len(geek) > 0))
 	if err != nil {
 		return DigestResult{}, fmt.Errorf("gemini 다이제스트 생성 실패: %w", err)
@@ -74,6 +76,7 @@ func (g *GeminiGenerator) Generate(ctx context.Context, items []NewsItem) (Diges
 // requestedDomain 이 비면 모델이 11개 도메인 중 하나를 선택하고,
 // 지정되면 그 도메인(또는 더 구체적인 세부 주제 힌트)으로 계층형 주제를 만든다.
 func (g *GeminiGenerator) GenerateTopics(ctx context.Context, requestedDomain string) (TopicResult, error) {
+	ctx = usage.WithFeature(ctx, "digest")
 	raw, err := g.client.GenerateText(ctx, systemPrompt, buildTopicPrompt(requestedDomain))
 	if err != nil {
 		return TopicResult{}, fmt.Errorf("gemini 공부주제 생성 실패: %w", err)
