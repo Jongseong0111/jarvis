@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,6 +110,23 @@ func TestNew_knowledgeRepoPathOverrideExpandsTilde(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	if cfg.KnowledgeRepoPath != filepath.Join(home, "kb") {
 		t.Fatalf("~ 확장 실패: %q", cfg.KnowledgeRepoPath)
+	}
+}
+
+func TestUsageLogPathDefault(t *testing.T) {
+	t.Setenv("SLACK_BOT_TOKEN", "x")
+	t.Setenv("SLACK_APP_TOKEN", "x")
+	t.Setenv("GEMINI_API_KEY", "x")
+	t.Setenv("NOTION_API_KEY", "x")
+	t.Setenv("NOTION_LOCATIONS_DB_ID", "x")
+	t.Setenv("NOTION_CATEGORIES_DB_ID", "x")
+	t.Setenv("NOTION_ITEMS_DB_ID", "x")
+	cfg, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if !strings.HasSuffix(cfg.UsageLogPath, "/.jarvis/usage.jsonl") {
+		t.Fatalf("UsageLogPath = %q, want ~/.jarvis/usage.jsonl", cfg.UsageLogPath)
 	}
 }
 
