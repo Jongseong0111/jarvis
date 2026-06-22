@@ -12,6 +12,9 @@ import (
 type RunResult struct {
 	SessionID string
 	Text      string
+	InputTk   int
+	OutputTk  int
+	CostUSD   float64
 }
 
 // Runner 는 Claude Code CLI 를 실행하는 능력이다(테스트에서 fake 주입).
@@ -22,8 +25,18 @@ type Runner interface {
 	Resume(ctx context.Context, dir, sessionID, prompt string) (RunResult, error)
 }
 
+// UsageSink 는 Claude 호출 비용 기록 대상이다(usage.Recorder 가 구현).
+type UsageSink interface {
+	LogClaude(feature, model string, inputTk, outputTk int, costUSD float64)
+}
+
 // CLIRunner 는 로컬 claude CLI 를 사용하는 Runner 구현이다.
-type CLIRunner struct{}
+type CLIRunner struct {
+	sink UsageSink
+}
+
+// SetUsageSink 는 비용 기록 sink 를 주입한다(nil 이면 기록 안 함).
+func (r *CLIRunner) SetUsageSink(s UsageSink) { r.sink = s }
 
 // New 는 CLIRunner 를 만든다.
 func New() *CLIRunner { return &CLIRunner{} }
@@ -53,13 +66,25 @@ func (r *CLIRunner) exec(ctx context.Context, dir string, args []string) (RunRes
 		}
 		return RunResult{}, fmt.Errorf("claude 실행 실패: %w", err)
 	}
-	return ParseOutput(out)
+	res, err := ParseOutput(out)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if r.sink != nil {
+		r.sink.LogClaude("kb", "claude", res.InputTk, res.OutputTk, res.CostUSD)
+	}
+	return res, nil
 }
 
 type cliOutput struct {
-	SessionID string `json:"session_id"`
-	Result    string `json:"result"`
-	IsError   bool   `json:"is_error"`
+	SessionID string  `json:"session_id"`
+	Result    string  `json:"result"`
+	IsError   bool    `json:"is_error"`
+	TotalCost float64 `json:"total_cost_usd"`
+	Usage     struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
 }
 
 // ParseOutput 은 claude --output-format json 출력을 RunResult 로 파싱한다.
@@ -71,5 +96,11 @@ func ParseOutput(data []byte) (RunResult, error) {
 	if o.IsError {
 		return RunResult{}, fmt.Errorf("claude 실행 오류: %s", o.Result)
 	}
-	return RunResult{SessionID: o.SessionID, Text: o.Result}, nil
+	return RunResult{
+		SessionID: o.SessionID,
+		Text:      o.Result,
+		InputTk:   o.Usage.InputTokens,
+		OutputTk:  o.Usage.OutputTokens,
+		CostUSD:   o.TotalCost,
+	}, nil
 }
