@@ -45,19 +45,81 @@ func NewGenerator(client *gemini.Client) *GeminiGenerator {
 	return &GeminiGenerator{client: client}
 }
 
+// maxGeekNews 는 결과에 허용하는 GeekNews 최대 개수다(나머지는 다른 출처로 섞기 위함).
+const maxGeekNews = 2
+
 // Generate 는 뉴스 후보 목록을 Gemini 에 보내 선별·요약 + 공부주제를 생성한다.
+// GeekNews 는 후보 풀에 그대로 두고 프롬프트로 "1~2개만 섞어라"를 지시하되,
+// 모델이 치우치면 코드가 GeekNews 를 최대 maxGeekNews 로 자르고, 0개면 1개 주입한다.
 func (g *GeminiGenerator) Generate(ctx context.Context, items []NewsItem) (DigestResult, error) {
-	raw, err := g.client.GenerateText(ctx, systemPrompt, buildPrompt(items))
+	geek := geekNewsItems(items)
+	raw, err := g.client.GenerateText(ctx, systemPrompt, buildPrompt(items, len(geek) > 0))
 	if err != nil {
 		return DigestResult{}, fmt.Errorf("gemini 다이제스트 생성 실패: %w", err)
 	}
-	return parseResponse(raw)
+	result, err := parseResponse(raw)
+	if err != nil {
+		return DigestResult{}, err
+	}
+	return balanceNews(result, items), nil
+}
+
+// geekNewsItems 는 후보 중 GeekNews 출처 항목만 추린다(피드 순서 유지).
+func geekNewsItems(items []NewsItem) []NewsItem {
+	var out []NewsItem
+	for _, it := range items {
+		if it.Source == "GeekNews" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// balanceNews 는 결과의 GeekNews 비중을 조정한다.
+// GeekNews 가 maxGeekNews 를 넘으면 초과분을 제거하고(다른 출처 우선),
+// 하나도 없으면 첫 GeekNews 를 맨 앞에 주입한다.
+func balanceNews(result DigestResult, items []NewsItem) DigestResult {
+	geek := geekNewsItems(items)
+	if len(geek) == 0 {
+		return result
+	}
+	srcByURL := make(map[string]string, len(items))
+	for _, it := range items {
+		srcByURL[it.URL] = it.Source
+	}
+
+	var kept []NewsResult
+	geekCount := 0
+	for _, n := range result.News {
+		if srcByURL[n.URL] == "GeekNews" {
+			if geekCount >= maxGeekNews {
+				continue // 초과 GeekNews 제거
+			}
+			geekCount++
+		}
+		kept = append(kept, n)
+	}
+
+	if geekCount == 0 {
+		forced := geek[0]
+		summary := strings.TrimSpace(forced.Desc)
+		if summary == "" {
+			summary = "GeekNews 인기 글"
+		}
+		kept = append([]NewsResult{{Title: forced.Title, URL: forced.URL, Summary: summary}}, kept...)
+	}
+
+	result.News = kept
+	return result
 }
 
 const systemPrompt = `너는 개발자를 위한 아침 다이제스트를 만드는 어시스턴트다. 반드시 JSON 으로만 응답하라. 마크다운 코드블록 없이 순수 JSON 만 출력하라.`
 
-func buildPrompt(items []NewsItem) string {
+// buildPrompt 는 전체 후보를 출처 라벨과 함께 나열하고, GeekNews 가 있으면
+// "최소 1개 반드시 포함" 지시를 더한다(모델이 가장 흥미로운 GeekNews 를 고르게 함).
+func buildPrompt(items []NewsItem, hasGeekNews bool) string {
 	var sb strings.Builder
+
 	sb.WriteString("[뉴스 후보 목록]\n")
 	for i, it := range items {
 		source := it.Source
@@ -69,7 +131,9 @@ func buildPrompt(items []NewsItem) string {
 	sb.WriteString("\n[작업]\n")
 	sb.WriteString("1. 위 목록에서 개발자에게 가장 흥미로운 항목 3-5개를 골라라.\n")
 	sb.WriteString("   - 실제 기술 내용 우선 (채용/마케팅/이벤트 제외)\n")
-	sb.WriteString("   - [GeekNews] 출처 항목이 후보에 있으면 그중 최소 1-2개를 반드시 포함하라\n")
+	if hasGeekNews {
+		sb.WriteString("   - [GeekNews] 1~2개(가장 흥미로운 것)와 다른 출처 3~4개를 섞어라. 한 출처에 치우치지 마라\n")
+	}
 	sb.WriteString("   - 각 항목: title(원문 유지), url(원문), summary(한국어 한줄 요약)\n\n")
 	sb.WriteString("2. 오늘의 개발 공부 주제를 생성하라.\n")
 	sb.WriteString("   - 아래 도메인 중 하나 선택: " + strings.Join(domains, " / ") + "\n")
