@@ -36,6 +36,7 @@ type Config struct {
 
 	DigestTime    string   // "HH:MM", 기본 "09:00"
 	DigestRSSURLs []string // 추가 RSS 피드 URL 목록
+	UsageLogPath  string   // LLM 비용 기록 JSONL 경로
 }
 
 // New 는 config/.env(있으면)와 환경변수에서 설정을 로드하고 필수값을 검증한다.
@@ -66,6 +67,7 @@ func New() (Config, error) {
 
 		DigestTime:    getenv("DIGEST_TIME", "09:00"),
 		DigestRSSURLs: parseCommaList(os.Getenv("DIGEST_RSS_URLS")),
+		UsageLogPath:  expandHome(getenv("USAGE_LOG_PATH", "~/.jarvis/usage.jsonl")),
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
