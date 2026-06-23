@@ -185,6 +185,19 @@ func LocationProperties(name, zone string) map[string]any {
 	return props
 }
 
+// LocationUpdateProperties 는 장소 수정용 부분 properties 맵이다(이름/구역만, 빈 값은 제외).
+// 생성과 달리 Type 은 건드리지 않는다.
+func LocationUpdateProperties(name, zone string) map[string]any {
+	props := map[string]any{}
+	if name != "" {
+		props[PropName] = titleProp(name)
+	}
+	if zone != "" {
+		props[PropZone] = map[string]any{"select": map[string]any{"name": zone}}
+	}
+	return props
+}
+
 func titleProp(s string) map[string]any {
 	return map[string]any{"title": []any{map[string]any{"text": map[string]any{"content": s}}}}
 }

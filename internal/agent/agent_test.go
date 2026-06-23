@@ -60,6 +60,7 @@ type fakeHomePort struct {
 	items        []notion.Item
 	search       []notion.Item
 	createdLoc   *[2]string // name, zone
+	updatedLoc   *[3]string // id, name, zone
 	updatedItem  string
 	archivedItem string
 }
@@ -78,6 +79,10 @@ func (f *fakeHomePort) CreateItem(_ context.Context, _, _, _, _ string, _ *int) 
 func (f *fakeHomePort) CreateLocation(_ context.Context, name, zone string) (string, error) {
 	f.createdLoc = &[2]string{name, zone}
 	return "loc-id", nil
+}
+func (f *fakeHomePort) UpdateLocation(_ context.Context, id, name, zone string) error {
+	f.updatedLoc = &[3]string{id, name, zone}
+	return nil
 }
 func (f *fakeHomePort) UpdateItem(_ context.Context, itemID, _, _, _ string, _ *int) error {
 	f.updatedItem = itemID

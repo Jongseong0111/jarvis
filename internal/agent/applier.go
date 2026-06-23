@@ -110,6 +110,15 @@ func (a HomeApplier) apply(ctx context.Context, p domain.ChangeProposal) (domain
 		}
 		return domain.Reply{Text: fmt.Sprintf("✅ 장소 '%s'을(를) %s 구역에 추가했어.", f["name"], f["zone"])}, nil
 
+	case "update_location":
+		if f["location_id"] == "" {
+			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(location_id 누락)")
+		}
+		if err := a.port.UpdateLocation(ctx, f["location_id"], f["new_name"], f["new_zone"]); err != nil {
+			return domain.Reply{}, fmt.Errorf("장소 수정 실패: %w", err)
+		}
+		return domain.Reply{Text: fmt.Sprintf("✅ 장소 '%s'을(를) 수정했어.", f["old_label"])}, nil
+
 	case "delete_location":
 		if f["location_id"] == "" {
 			return domain.Reply{}, fmt.Errorf("변경안이 불완전함(location_id 누락)")

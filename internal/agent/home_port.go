@@ -16,7 +16,8 @@ type HomePort interface {
 	SearchItems(ctx context.Context, name string) ([]notion.Item, error)
 	CreateItem(ctx context.Context, name, categoryID, locationID, zone string, quantity *int) (string, error)
 	CreateLocation(ctx context.Context, name, zone string) (string, error)
-	EnsureCategory(ctx context.Context, name string) (string, error) // 이름으로 찾고 없으면 생성
+	UpdateLocation(ctx context.Context, locationID, name, zone string) error // 이름/구역 변경(빈 값은 유지)
+	EnsureCategory(ctx context.Context, name string) (string, error)         // 이름으로 찾고 없으면 생성
 	UpdateItem(ctx context.Context, itemID, categoryID, locationID, zone string, quantity *int) error
 	ArchiveItem(ctx context.Context, itemID string) error
 	ArchiveLocation(ctx context.Context, locationID string) error
@@ -95,6 +96,11 @@ func (h NotionHome) CreateItem(ctx context.Context, name, categoryID, locationID
 // CreateLocation 은 장소 DB 에 page 를 생성한다.
 func (h NotionHome) CreateLocation(ctx context.Context, name, zone string) (string, error) {
 	return h.client.CreatePage(ctx, h.locationsDB, notion.LocationProperties(name, zone))
+}
+
+// UpdateLocation 은 장소의 이름/구역을 변경한다(빈 값은 그대로 둠).
+func (h NotionHome) UpdateLocation(ctx context.Context, locationID, name, zone string) error {
+	return h.client.UpdatePage(ctx, locationID, notion.LocationUpdateProperties(name, zone))
 }
 
 // EnsureCategory 는 이름으로 카테고리를 찾고, 없으면 새로 만들어 page ID 를 반환한다.

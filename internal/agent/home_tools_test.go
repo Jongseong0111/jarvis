@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/Jongseong0111/jarvis/domain"
 	"github.com/Jongseong0111/jarvis/internal/notion"
 )
 
@@ -59,6 +61,47 @@ func TestFindLocation_notFound(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("못 찾으면 nil 기대: %+v", got)
+	}
+}
+
+func TestUpdateLocationTool_proposesRename(t *testing.T) {
+	t.Parallel()
+	f := &fakeHomePort{locations: []notion.Location{{ID: "L1", Name: "로그 방 팬트리", Zone: "로그 방"}}}
+	tool := toolByName(HomeTools(f, "", ""), "update_location")
+	if !tool.Write {
+		t.Fatal("update_location 은 쓰기(승인) 도구여야 한다")
+	}
+	p, err := tool.Propose(context.Background(), map[string]any{"current": "로그방 팬트리", "new_name": "팬트리"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if p.Op != "update_location" || p.Fields["location_id"] != "L1" || p.Fields["new_name"] != "팬트리" {
+		t.Fatalf("변경안 필드 불일치: %+v", p)
+	}
+}
+
+func TestUpdateLocationTool_needsChange(t *testing.T) {
+	t.Parallel()
+	f := &fakeHomePort{locations: []notion.Location{{ID: "L1", Name: "팬트리", Zone: "로그 방"}}}
+	tool := toolByName(HomeTools(f, "", ""), "update_location")
+	if _, err := tool.Propose(context.Background(), map[string]any{"current": "팬트리"}); err == nil {
+		t.Fatal("바꿀 이름/구역이 없으면 에러를 기대")
+	}
+}
+
+func TestUpdateLocationApplier(t *testing.T) {
+	t.Parallel()
+	f := &fakeHomePort{}
+	applier := NewHomeApplier(f, nil)
+	_, err := applier.Apply(context.Background(), domain.ChangeProposal{
+		Op:     "update_location",
+		Fields: map[string]string{"location_id": "L9", "new_name": "서랍장", "new_zone": "로그 방", "old_label": "로그방 - 로그방 서랍장"},
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if f.updatedLoc == nil || *f.updatedLoc != [3]string{"L9", "서랍장", "로그 방"} {
+		t.Fatalf("UpdateLocation 호출 인자 불일치: %+v", f.updatedLoc)
 	}
 }
 
