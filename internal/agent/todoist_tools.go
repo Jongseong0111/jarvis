@@ -25,21 +25,18 @@ func TodoistTools(port TodoistPort) []Tool {
 func (t todoistTools) listTodos() Tool {
 	return Tool{
 		Decl: &genai.FunctionDeclaration{
-			Name:        "list_todos",
-			Description: "할일을 조회한다. filter 미지정 시 오늘+밀린 할일. 전체(반복·스케줄 포함)를 보려면 filter=\"all\". 그 외엔 Todoist 필터 문법(예: today, overdue, tomorrow, today | overdue).",
+			Name: "list_todos",
+			Description: "할일을 조회한다. 사용자 의도에 맞는 filter 를 골라 넣어라:\n" +
+				"- 미지정/오늘 할일: 비워두면 'today | overdue'(오늘+밀린).\n" +
+				"- 전체(반복·스케줄 포함): filter=\"all\".\n" +
+				"- 관리함/아직 일정 안 정한/마감 없는 할일: filter=\"no date\".\n" +
+				"- 그 외 기간: Todoist 필터 문법(today, overdue, tomorrow, '7 days'(이번주), 'next week').",
 			Parameters: objSchema(map[string]*genai.Schema{
-				"filter": strSchema("Todoist 필터(선택). 기본 'today | overdue'. 전체는 'all'."),
+				"filter": strSchema("Todoist 필터(선택). 기본 'today | overdue', 전체 'all', 마감없음 'no date', 이번주 '7 days'."),
 			}),
 		},
 		Run: func(ctx context.Context, args map[string]any) (string, error) {
-			filter := strings.TrimSpace(strArg(args, "filter"))
-			switch strings.ToLower(filter) {
-			case "":
-				filter = "today | overdue"
-			case "all", "전체", "모든", "모두":
-				filter = "" // 빈 필터 → 전체 활성 할일(/tasks)
-			}
-			tasks, err := t.port.ListTasks(ctx, filter)
+			tasks, err := t.port.ListTasks(ctx, resolveFilter(strArg(args, "filter")))
 			if err != nil {
 				return "", err
 			}
@@ -48,6 +45,23 @@ func (t todoistTools) listTodos() Tool {
 			}
 			return formatTaskLines(tasks), nil
 		},
+	}
+}
+
+// resolveFilter 는 사용자/LLM 이 준 필터 표현을 Todoist 필터 문법으로 정규화한다.
+// 빈 값은 오늘+밀린, 전체 별칭은 빈 필터(/tasks), 관리함·마감없음 별칭은 "no date".
+// 그 외는 Todoist 필터 문법으로 보고 그대로 통과시킨다.
+func resolveFilter(input string) string {
+	f := strings.TrimSpace(input)
+	switch strings.ToLower(f) {
+	case "":
+		return "today | overdue"
+	case "all", "전체", "모든", "모두":
+		return "" // 빈 필터 → 전체 활성 할일(/tasks)
+	case "inbox", "관리함", "인박스", "마감없음", "날짜없음", "기한없음", "일정없음", "no date", "no due date":
+		return "no date"
+	default:
+		return f
 	}
 }
 

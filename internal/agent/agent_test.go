@@ -14,6 +14,17 @@ import (
 
 var errInjected = errors.New("injected")
 
+// 비용 조회(list_usage)는 도구가 등록돼도 프롬프트가 안내하지 않으면 LLM 이 호출하지 않는다.
+func TestDefaultSystemPrompt_mentionsUsage(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(DefaultSystemPrompt, "list_usage") {
+		t.Fatalf("프롬프트에 list_usage 안내 없음")
+	}
+	if !strings.Contains(DefaultSystemPrompt, "비용") {
+		t.Fatalf("프롬프트에 비용 안내 없음")
+	}
+}
+
 // --- fakes ---
 
 type fakeGen struct {

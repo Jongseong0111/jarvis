@@ -252,8 +252,9 @@ func (h homeTools) addLocation() Tool {
 			if err != nil {
 				return domain.ChangeProposal{}, err
 			}
-			if findLocation(locs, name) != nil {
-				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소는 이미 있어", name)
+			existing, _ := findLocation(locs, name, zone)
+			if existing != nil {
+				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소는 이미 %s 구역에 있어", name, zone)
 			}
 			return domain.ChangeProposal{
 				Op:      "add_location",
@@ -269,10 +270,11 @@ func (h homeTools) addItem() Tool {
 		Write: true,
 		Decl: &genai.FunctionDeclaration{
 			Name:        "add_item",
-			Description: "물건을 특정 장소에 등록한다. location 은 반드시 등록된 장소 이름이어야 한다.",
+			Description: "물건을 특정 장소에 등록한다. location 은 반드시 등록된 장소 이름이어야 한다. 같은 이름의 장소가 여러 구역에 있으면 zone 으로 구분한다.",
 			Parameters: objSchema(map[string]*genai.Schema{
 				"name":     strSchema("물건 이름. 예: 체온계"),
 				"location": strSchema("등록된 장소 이름. 예: 아기 트롤리"),
+				"zone":     strSchema("장소의 구역(선택). 동명 장소 구분용. 예: 로그 방"),
 				"category": strSchema("카테고리 이름(선택). 예: 아기상비약"),
 				"quantity": intSchema("수량(선택)"),
 			}, "name", "location"),
@@ -287,7 +289,10 @@ func (h homeTools) addItem() Tool {
 			if err != nil {
 				return domain.ChangeProposal{}, err
 			}
-			loc := findLocation(locs, locName)
+			loc, err := findLocation(locs, locName, strArg(args, "zone"))
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
 			if loc == nil {
 				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", locName, strings.Join(locationNames(locs), ", "))
 			}
@@ -322,6 +327,7 @@ func (h homeTools) addItems() Tool {
 				"items": arraySchema(objSchema(map[string]*genai.Schema{
 					"name":     strSchema("물건 이름"),
 					"location": strSchema("등록된 장소 이름"),
+					"zone":     strSchema("구역(선택). 동명 장소 구분용"),
 					"category": strSchema("카테고리 이름(선택)"),
 					"quantity": intSchema("수량(선택)"),
 				}, "name", "location")),
@@ -345,7 +351,10 @@ func (h homeTools) addItems() Tool {
 				if name == "" || locName == "" {
 					return domain.ChangeProposal{}, fmt.Errorf("물건 이름과 장소가 필요해")
 				}
-				loc := findLocation(locs, locName)
+				loc, err := findLocation(locs, locName, strArg(m, "zone"))
+				if err != nil {
+					return domain.ChangeProposal{}, err
+				}
 				if loc == nil {
 					return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", locName, strings.Join(locationNames(locs), ", "))
 				}
@@ -380,6 +389,7 @@ func (h homeTools) updateItem() Tool {
 			Parameters: objSchema(map[string]*genai.Schema{
 				"name":     strSchema("바꿀 물건 이름"),
 				"location": strSchema("옮길 장소 이름(선택)"),
+				"zone":     strSchema("장소의 구역(선택). 동명 장소 구분용"),
 				"category": strSchema("지정할 카테고리(대분류) 이름(선택). 예: 청소용품"),
 				"quantity": intSchema("최종 수량(선택)"),
 			}, "name"),
@@ -396,7 +406,10 @@ func (h homeTools) updateItem() Tool {
 				if err != nil {
 					return domain.ChangeProposal{}, err
 				}
-				loc := findLocation(locs, locName)
+				loc, err := findLocation(locs, locName, strArg(args, "zone"))
+				if err != nil {
+					return domain.ChangeProposal{}, err
+				}
 				if loc == nil {
 					return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", locName, strings.Join(locationNames(locs), ", "))
 				}
@@ -495,6 +508,7 @@ func (h homeTools) deleteLocation() Tool {
 			Description: "장소(자리)를 삭제한다.",
 			Parameters: objSchema(map[string]*genai.Schema{
 				"name": strSchema("삭제할 장소 이름"),
+				"zone": strSchema("구역(선택). 동명 장소 구분용"),
 			}, "name"),
 		},
 		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
@@ -502,7 +516,10 @@ func (h homeTools) deleteLocation() Tool {
 			if err != nil {
 				return domain.ChangeProposal{}, err
 			}
-			loc := findLocation(locs, strArg(args, "name"))
+			loc, err := findLocation(locs, strArg(args, "name"), strArg(args, "zone"))
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
 			if loc == nil {
 				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어.", strArg(args, "name"))
 			}
@@ -601,14 +618,62 @@ func categoryNames(cats []notion.Category) []string {
 	return out
 }
 
-func findLocation(locs []notion.Location, name string) *notion.Location {
-	name = strings.TrimSpace(name)
+// locKey 는 공백·대소문자를 무시한 비교 키다. "로그 방"=="로그방"=="로그  방".
+func locKey(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), ""))
+}
+
+// findLocation 은 이름(+선택적 zone)으로 장소를 찾는다.
+// 0개면 (nil, nil), 1개면 매칭, 같은 이름이 여러 구역에 있고 zone 으로 못 좁히면
+// 첫 매칭을 임의로 고르지 않고 ambiguous 에러로 되묻게 한다.
+func findLocation(locs []notion.Location, name, zone string) (*notion.Location, error) {
+	nk, zk := locKey(name), locKey(zone)
+	var matches []*notion.Location
 	for i := range locs {
-		if strings.EqualFold(locs[i].Name, name) {
-			return &locs[i]
+		if locKey(locs[i].Name) != nk {
+			continue
 		}
+		if zk != "" && locKey(locs[i].Zone) != zk {
+			continue
+		}
+		matches = append(matches, &locs[i])
 	}
-	return nil
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return matches[0], nil
+	default:
+		var zones []string
+		for _, m := range matches {
+			zones = append(zones, m.Zone)
+		}
+		return nil, fmt.Errorf("'%s' 장소가 여러 구역에 있어(%s). 어느 구역인지 알려줘.", name, strings.Join(zones, ", "))
+	}
+}
+
+// formatLocationsHint 는 현재 장소 목록을 시스템 프롬프트용 블록으로 만든다(구역별 묶음).
+func formatLocationsHint(locs []notion.Location) string {
+	byZone := map[string][]string{}
+	for _, l := range locs {
+		byZone[l.Zone] = append(byZone[l.Zone], l.Name)
+	}
+	var b strings.Builder
+	b.WriteString("[현재 등록된 장소 — 물건을 넣거나 옮길 땐 아래 목록의 정확한 장소 이름을 location 에, 그 구역을 zone 에 함께 넣어 도구를 호출해라. 같은 이름이 여러 구역에 있으면 반드시 zone 으로 구분한다]\n")
+	b.WriteString(formatByZone(byZone))
+	return b.String()
+}
+
+// LocationsHint 는 HomePort 에서 현재 장소 목록을 가져와 시스템 프롬프트 블록을 만든다.
+// 매 메시지 호출되며, 조회 실패나 장소 없음 시 빈 문자열(프롬프트에 안 붙음).
+func LocationsHint(port HomePort) func(context.Context) string {
+	return func(ctx context.Context) string {
+		locs, err := port.Locations(ctx)
+		if err != nil || len(locs) == 0 {
+			return ""
+		}
+		return formatLocationsHint(locs)
+	}
 }
 
 func findCategory(cats []notion.Category, name string) *notion.Category {

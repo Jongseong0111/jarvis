@@ -132,7 +132,8 @@ func main() {
 		sysPrompt += agent.CalendarSystemHint
 	}
 
-	ag := agent.New(geminiClient, visionClient, tools, sysPrompt)
+	ag := agent.New(geminiClient, visionClient, tools, sysPrompt).
+		WithLocationsHint(agent.LocationsHint(home)) // 매 메시지 현재 장소 목록 주입(동명 장소 구분)
 	reviewRouter := agent.NewReviewRouter(ag, reviewRegistry, ccRunner, client, cfg.KnowledgeRepoPath)
 	handler := slack.NewHandler(reviewRouter, client)
 

@@ -49,7 +49,7 @@ func TestBuildPrompt_geekNewsInPoolWithInstruction(t *testing.T) {
 		{Title: "긱뉴스글", URL: "https://hada.io/1", Desc: "긱설명", Source: "GeekNews"},
 		{Title: "HN글", URL: "https://hn.com/2", Desc: "HN설명", Source: "HN"},
 	}
-	p := buildPrompt(items, true)
+	p := buildPrompt(items, true, "언어")
 	// GeekNews와 HN 모두 후보 풀에 라벨과 함께 남아야 한다.
 	if !strings.Contains(p, "[GeekNews]") || !strings.Contains(p, "긱뉴스글") {
 		t.Fatalf("GeekNews가 후보에 없음: %q", p)
@@ -66,7 +66,7 @@ func TestBuildPrompt_geekNewsInPoolWithInstruction(t *testing.T) {
 func TestBuildPrompt_noGeekNewsNoInstruction(t *testing.T) {
 	t.Parallel()
 	items := []NewsItem{{Title: "HN글", URL: "https://hn.com/2", Source: "HN"}}
-	p := buildPrompt(items, false)
+	p := buildPrompt(items, false, "언어")
 	if strings.Contains(p, "반드시 포함") {
 		t.Fatalf("GeekNews 없는데 포함 지시가 생김: %q", p)
 	}
@@ -164,12 +164,38 @@ func TestBuildTopicPrompt_specificDomain(t *testing.T) {
 	}
 }
 
-func TestBuildTopicPrompt_randomDomain(t *testing.T) {
+func TestBuildTopicPrompt_noHardcodedExample(t *testing.T) {
 	t.Parallel()
-	p := buildTopicPrompt("")
-	// 미지정 시 11개 도메인 목록이 제시되어야 한다.
-	if !strings.Contains(p, "운영체제") || !strings.Contains(p, "데이터베이스") || !strings.Contains(p, "자료구조·알고리즘") {
-		t.Fatalf("도메인 목록 미포함: %q", p)
+	// 고정 예시("Vector DB → HNSW")가 매번 같은 주제를 유도하지 않도록 제거됐어야 한다.
+	p := buildTopicPrompt("데이터베이스")
+	if strings.Contains(p, "HNSW") || strings.Contains(p, "Vector DB") {
+		t.Fatalf("고정 예시가 남아있음: %q", p)
+	}
+	// 전달된 도메인이 그대로 반영돼야 한다.
+	if !strings.Contains(p, "데이터베이스") {
+		t.Fatalf("도메인 미반영: %q", p)
+	}
+}
+
+func TestChooseDomain_keepsRequested(t *testing.T) {
+	t.Parallel()
+	got := chooseDomain("운영체제", func(int) int { return 0 })
+	if got != "운영체제" {
+		t.Fatalf("지정 도메인 유지 실패: %q", got)
+	}
+}
+
+func TestChooseDomain_randomWhenEmpty(t *testing.T) {
+	t.Parallel()
+	// randIntn 에는 도메인 개수가 전달되고, 그 인덱스의 도메인이 선택돼야 한다.
+	got := chooseDomain("", func(n int) int {
+		if n != len(domains) {
+			t.Fatalf("randIntn 인자=%d, want %d", n, len(domains))
+		}
+		return 5
+	})
+	if got != domains[5] {
+		t.Fatalf("랜덤 선택=%q, want %q", got, domains[5])
 	}
 }
 

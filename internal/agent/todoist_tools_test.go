@@ -69,6 +69,34 @@ func TestListTodosTool_filterMapping(t *testing.T) {
 	}
 }
 
+func TestResolveFilter(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"빈값 → 오늘+밀린", "", "today | overdue"},
+		{"all → 전체", "all", ""},
+		{"전체(한글) → 전체", "전체", ""},
+		{"모두 → 전체", "모두", ""},
+		{"관리함 → 마감없음", "관리함", "no date"},
+		{"인박스 → 마감없음", "인박스", "no date"},
+		{"마감없음 → 마감없음", "마감없음", "no date"},
+		{"일정없음 → 마감없음", "일정없음", "no date"},
+		{"명시 필터는 그대로", "tomorrow", "tomorrow"},
+		{"공백 trim", "  overdue  ", "overdue"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveFilter(tt.in); got != tt.want {
+				t.Fatalf("resolveFilter(%q)=%q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func toolByName(tools []Tool, name string) Tool {
 	for _, t := range tools {
 		if t.Decl.Name == name {
