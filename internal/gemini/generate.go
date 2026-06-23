@@ -8,8 +8,14 @@ import (
 	"google.golang.org/genai"
 )
 
-// GenerateText 는 도구 없이 일반 텍스트를 생성한다(요약 등).
+// GenerateText 는 도구 없이 일반 텍스트를 생성한다(요약 등). 온도 0(결정론적).
 func (c *Client) GenerateText(ctx context.Context, system, user string) (string, error) {
+	return c.GenerateTextTemp(ctx, system, user, 0)
+}
+
+// GenerateTextTemp 는 온도를 지정해 텍스트를 생성한다.
+// 공부 주제처럼 다양성이 필요한 생성에는 0 보다 큰 값을 쓴다.
+func (c *Client) GenerateTextTemp(ctx context.Context, system, user string, temperature float32) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
@@ -21,7 +27,7 @@ func (c *Client) GenerateText(ctx context.Context, system, user string) (string,
 		return "", fmt.Errorf("gemini 클라이언트 생성 실패: %w", err)
 	}
 
-	temp := float32(0)
+	temp := temperature
 	thinkBudget := int32(0)
 	cfg := &genai.GenerateContentConfig{
 		Temperature:    &temp,

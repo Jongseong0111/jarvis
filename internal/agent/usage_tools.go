@@ -31,7 +31,8 @@ func UsageTools(r UsageReader) []Tool {
 			if period == "" {
 				period = "today"
 			}
-			from, to := usage.RangeForPeriod(time.Now(), period)
+			// 기록은 Asia/Seoul(+09:00)로 남으므로 기간 경계도 서울 기준으로 잡는다(호스트 TZ 무관).
+			from, to := usage.RangeForPeriod(time.Now().In(seoulLoc()), period)
 			s, err := r.Query(from, to)
 			if err != nil {
 				return "", fmt.Errorf("비용 조회 실패: %w", err)
