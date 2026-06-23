@@ -27,6 +27,7 @@ func HomeTools(port HomePort, homeURL, mapURL string) []Tool {
 		h.searchItem(),
 		h.listCategories(),
 		h.addLocation(),
+		h.updateLocation(),
 		h.addItem(),
 		h.addItems(),
 		h.updateItem(),
@@ -260,6 +261,56 @@ func (h homeTools) addLocation() Tool {
 				Op:      "add_location",
 				Summary: fmt.Sprintf("장소 추가\n이름: %s\n구역: %s", name, zone),
 				Fields:  map[string]string{"name": name, "zone": zone},
+			}, nil
+		},
+	}
+}
+
+func (h homeTools) updateLocation() Tool {
+	return Tool{
+		Write: true,
+		Decl: &genai.FunctionDeclaration{
+			Name:        "update_location",
+			Description: "장소의 이름이나 구역을 변경한다. current 로 현재 장소를 찾고 new_name/new_zone 중 바꿀 것만 넣는다. 이름에서 구역명을 빼거나(예: '로그 방 팬트리'→'팬트리'), 구역을 합칠 때(예: 구역 '로그방'→'로그 방') 쓴다.",
+			Parameters: objSchema(map[string]*genai.Schema{
+				"current":  strSchema("현재 장소 이름. 예: 로그 방 팬트리"),
+				"zone":     strSchema("현재 장소의 구역(선택, 동명 구분용)"),
+				"new_name": strSchema("새 이름(선택)"),
+				"new_zone": strSchema("새 구역(선택)"),
+			}, "current"),
+		},
+		Propose: func(ctx context.Context, args map[string]any) (domain.ChangeProposal, error) {
+			cur := strings.TrimSpace(strArg(args, "current"))
+			if cur == "" {
+				return domain.ChangeProposal{}, fmt.Errorf("바꿀 장소 이름을 알려줘")
+			}
+			newName := strings.TrimSpace(strArg(args, "new_name"))
+			newZone := strings.TrimSpace(strArg(args, "new_zone"))
+			if newName == "" && newZone == "" {
+				return domain.ChangeProposal{}, fmt.Errorf("바꿀 이름이나 구역을 알려줘")
+			}
+			locs, err := h.port.Locations(ctx)
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			loc, err := findLocation(locs, cur, strArg(args, "zone"))
+			if err != nil {
+				return domain.ChangeProposal{}, err
+			}
+			if loc == nil {
+				return domain.ChangeProposal{}, fmt.Errorf("'%s' 장소를 못 찾았어. 등록된 장소: %s", cur, strings.Join(locationNames(locs), ", "))
+			}
+			var changes []string
+			if newName != "" {
+				changes = append(changes, "이름 → "+newName)
+			}
+			if newZone != "" {
+				changes = append(changes, "구역 → "+newZone)
+			}
+			return domain.ChangeProposal{
+				Op:      "update_location",
+				Summary: fmt.Sprintf("장소 수정\n대상: %s\n%s", locWithZone(*loc), strings.Join(changes, "\n")),
+				Fields:  map[string]string{"location_id": loc.ID, "old_label": locWithZone(*loc), "new_name": newName, "new_zone": newZone},
 			}, nil
 		},
 	}
